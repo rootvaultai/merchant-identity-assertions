@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://registeredbrands.ai/schemas/midd-v1.schema.json",
+  "title": "midd-v1",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "type": {
+      "const": "MerchantIdentityDelegation"
+    },
+    "subject": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$"
+    },
+    "authorizedIssuer": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$"
+    },
+    "issuedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "expiresAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "proof": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "MerchantIdentityProof-v1"
+        },
+        "alg": {
+          "const": "Ed25519"
+        },
+        "created": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "verificationMethod": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://[^?#]+#[A-Za-z0-9_-]+$"
+        },
+        "proofValue": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{86}$"
+        }
+      },
+      "required": [
+        "type",
+        "alg",
+        "created",
+        "verificationMethod",
+        "proofValue"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "version",
+    "type",
+    "subject",
+    "authorizedIssuer",
+    "issuedAt",
+    "expiresAt",
+    "proof"
+  ],
+  "additionalProperties": false
+}
