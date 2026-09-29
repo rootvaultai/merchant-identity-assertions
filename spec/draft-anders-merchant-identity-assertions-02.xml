@@ -1,0 +1,1718 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<rfc xmlns:xi="http://www.w3.org/2001/XInclude" ipr="trust200902" docName="draft-anders-merchant-identity-assertions-02" category="info" submissionType="IETF" consensus="false" version="3">
+  <front>
+    <title abbrev="Merchant Identity Assertions">Merchant Identity Assertions for Autonomous Commerce</title>
+    <seriesInfo name="Internet-Draft" value="draft-anders-merchant-identity-assertions-02"/>
+    <author fullname="Robb Anders" initials="R." surname="Anders">
+      <organization>RegisteredBrands.AI</organization>
+      <address>
+        <email>founder@registeredbrands.ai</email>
+        <uri>https://registeredbrands.ai</uri>
+      </address>
+    </author>
+    <date year="2026" month="September" day="28"/>
+    <keyword>merchant identity</keyword>
+    <keyword>autonomous commerce</keyword>
+    <keyword>agentic commerce</keyword>
+    <keyword>trust verification</keyword>
+    <keyword>Ed25519</keyword>
+    <abstract>
+      <t>Existing work helps a relying party determine whether an
+      automated client is authorized to initiate a transaction. This
+      document addresses the complementary problem: how that client
+      can obtain a verifiable identity statement about the merchant
+      that will receive the resulting payment, before the transaction
+      is completed.</t>
+      <t>This document defines a Merchant Identity Assertion (MIA):
+      a signed JSON document binding a legal entity claim to a
+      domain name. It specifies the claims schema, the proof
+      envelope, key discovery via a JSON Web Key Set at a
+      well-known URI, third-party issuance with explicit
+      authorization, signing and verification procedures, validity
+      and revocation semantics, and an optional signed Evaluation
+      Result Token that records the outcome of a verification check
+      as a portable audit artifact.</t>
+      <t>This document is informational. It defines a discovery and
+      verification mechanism only. It does not define trust scoring,
+      merchant ranking, payment authorization, or agent identity.
+      It complements existing agent identity and payment
+      authorization protocols without modifying them.</t>
+      <t>This revision also defines an optional Agent Runtime Integration Profile. It binds a merchant verification result to a relying party, verification criteria, and an exact transaction request, and defines a separately signed appraisal for runtime evidence systems. An informative mapping describes integration with Agent Manifest, cMCP, and TRACE. Implementing that mapping does not imply endorsement or conformance to those projects.</t>
+    </abstract>
+    <note title="Author Revision Status">
+      <t>This -02 revision is an author-maintained work in progress. Publishing the source repository does not submit this revision to the IETF, establish working-group adoption, or constitute approval by the IETF or AgenTrust. External specifications cited here are evolving drafts; interoperability claims require an exact implementation revision and reproducible evidence.</t>
+    </note>
+  </front>
+  <middle>
+    <section anchor="introduction">
+      <name>Introduction</name>
+      <t>The rapid growth of autonomous AI agents executing financial
+      transactions on behalf of human principals has created a new
+      class of trust requirements that existing protocols do not
+      fully address.</t>
+      <t>Current work in agent identity -- including IETF Web Bot Auth
+      <xref target="WEBBOTAUTH"/> and payment authorization frameworks such as Visa
+      Trusted Agent Protocol, Mastercard Agent Pay, and the KYAPay Profile
+      <xref target="KYAPAY"/> -- provides
+      mechanisms for a receiving system to verify that an automated
+      client is legitimate and authorized to transact.
+      HTTP Message Signatures <xref target="RFC9421"/> provide the cryptographic
+      foundation on which several of these frameworks build.</t>
+      <t>MIA is independent of these mechanisms but designed to
+      compose with them. A relying party MAY use Web Bot Auth or
+      HTTP Message Signatures to authenticate itself to the
+      merchant's MIA endpoint, and the merchant MAY use the same
+      mechanisms to authenticate its inbound transaction request
+      from the agent. The MIA itself is fetched as a static signed
+      document and does not require any specific transport-layer
+      authentication. This independence is intentional: it allows
+      MIA verification to occur in deployment contexts where
+      transport-coupled signing is not available, while permitting
+      transport-coupled signing where it is.</t>
+      <t>These mechanisms answer: "Is this agent who it claims to be,
+      and is it authorized to pay?"</t>
+      <t>This document focuses on the complementary question: "Is the merchant this agent intends to pay who it
+      claims to be?"</t>
+      <t>In human-mediated commerce, consumers evaluate merchant
+      identity through visual cues, brand recognition, and
+      accumulated reputation. Autonomous agents lack these faculties.
+      Without a machine-readable, cryptographically verifiable
+      merchant identity mechanism, agents must either trust merchant
+      identity claims implicitly -- creating fraud exposure -- or
+      implement proprietary verification mechanisms that are not
+      interoperable.</t>
+      <t>This document defines the Merchant Identity Assertion (MIA):
+      a minimal, interoperable signed JSON document that enables any
+      autonomous agent to verify merchant identity before executing
+      a transaction.</t>
+      <t>The MIA is designed to:</t>
+      <ul>
+        <li>Be self-hostable by any merchant at a well-known URI</li>
+        <li>Be verifiable by any agent without central registry dependency</li>
+        <li>Complement existing agent identity protocols without replacing or competing with them</li>
+        <li>Support independent implementations by any party</li>
+      </ul>
+      <t>This document does not define trust scoring algorithms,
+      merchant ranking systems, payment authorization protocols,
+      or agent identity mechanisms. Those concerns are addressed
+      by other specifications.</t>
+    </section>
+    <section anchor="terminology">
+      <name>Terminology</name>
+      <t>The key words "MUST", "MUST NOT", "REQUIRED", "SHALL",
+      "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED",
+      "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this document
+      are to be interpreted as described in BCP 14 <xref target="RFC2119"/>
+        <xref target="RFC8174"/> when, and only when, they appear in all capitals,
+      as shown here.</t>
+      <dl>
+        <dt>Merchant:</dt>
+        <dd>A legal entity offering goods or services in exchange for
+        payment, identified by a domain name.</dd>
+        <dt>Merchant Identity Assertion (MIA):</dt>
+        <dd>A signed JSON document attesting to the verifiable identity
+        of a merchant entity, as defined in <xref target="mia"/>.</dd>
+        <dt>Claims Object:</dt>
+        <dd>The JSON object containing the identity fields of an MIA,
+        excluding the proof. Used as the signing input.</dd>
+        <dt>Proof Object:</dt>
+        <dd>The JSON object embedded in an MIA that carries the
+        cryptographic signature and key reference, as defined
+        in <xref target="proof-object"/>.</dd>
+        <dt>Issuer:</dt>
+        <dd>An entity that signs and publishes a Merchant Identity
+        Assertion. The issuer MAY be the merchant itself or a
+        third party acting on the merchant's behalf with explicit
+        authorization per <xref target="third-party-auth"/>.</dd>
+        <dt>Relying Party:</dt>
+        <dd>An autonomous agent or system that consumes a Merchant
+        Identity Assertion to make a pre-transaction verification
+        decision.</dd>
+        <dt>Subject Domain:</dt>
+        <dd>The fully qualified domain name (FQDN) to which the
+        Merchant Identity Assertion applies.</dd>
+        <dt>Evaluation Result Token (ERT):</dt>
+        <dd>A signed JWT <xref target="RFC7519"/> issued by a verification service
+        summarizing the result of a pre-transaction merchant
+        identity check, as defined in <xref target="ert"/>.</dd>
+        <dt>Key Directory:</dt>
+        <dd>A JSON Web Key Set <xref target="RFC7517"/> published at a well-known
+        location used to discover public keys for signature
+        verification.</dd>
+        <dt>Domain Comparison:</dt>
+        <dd>Throughout this document, comparison of two FQDNs
+        (e.g., subject against verifier-supplied domain;
+        verificationMethod authority against issuer.domain;
+        DNS TXT issuer value against issuer.domain) MUST be
+        performed as follows: both values are converted to
+        their A-label form per IDNA2008 <xref target="RFC5890"/>;
+        any trailing dot is removed; the resulting ASCII
+        labels are compared case-insensitively. Internationalized
+        domain names that differ only by U-label vs A-label
+        representation MUST be treated as equal. Implementations
+        MUST reject FQDN values that contain disallowed code
+        points or that fail IDNA2008 processing.</dd>
+      </dl>
+    </section>
+    <section anchor="problem-statement">
+      <name>Problem Statement</name>
+      <t>Consider an autonomous procurement agent operating on
+      behalf of a corporate principal. The agent receives an
+      invoice from supplier.example.com for goods delivered
+      under an existing master services agreement. The agent
+      has standing authorization to settle invoices below a
+      configured threshold without human review.</t>
+      <t>Before authorizing payment, the agent needs to answer
+      a transaction-specific identity question: is the legal entity operating supplier.example.com
+      the same entity named on the underlying agreement? The
+      agent has the invoice, a domain name, and a payment
+      destination. It has no machine-readable, cryptographically
+      verifiable statement that binds the domain to a specific
+      legal entity, jurisdiction, and registration record.</t>
+      <t>In the absence of such a statement, the agent has three
+      options: trust the domain implicitly, defer to a human
+      reviewer (defeating the automation), or rely on a
+      proprietary verification service whose attestations are
+      not interoperable with other agents or auditors.</t>
+      <t>This document addresses this gap. It defines a signed,
+      self-hostable assertion that any merchant can publish
+      and any agent can verify, producing a portable audit
+      artifact in the process.</t>
+      <t>More generally, autonomous agents executing financial
+      transactions face a fundamental asymmetry: agent identity
+      protocols enable merchants to verify agents, while merchant identity evidence must also be evaluated by agents before payment.</t>
+      <t>This asymmetry creates the following risks:</t>
+      <section anchor="merchant-impersonation">
+        <name>Merchant Impersonation</name>
+        <t>Without verifiable merchant identity, an agent may be
+        directed to pay a fraudulent entity impersonating a
+        legitimate merchant. Domain spoofing, homograph attacks,
+        and DNS hijacking all represent realistic attack vectors
+        in autonomous transaction flows.</t>
+      </section>
+      <section anchor="absent-audit-trail">
+        <name>Absent Audit Trail</name>
+        <t>Regulated industries including healthcare, government
+        procurement, and financial services require demonstrable
+        proof that vendor identity was verified before payment.
+        This document proposes one interoperable mechanism for recording that a defined merchant identity check occurred; applicable obligations remain deployment-specific.</t>
+      </section>
+      <section anchor="policy-enforcement-gap">
+        <name>Policy Enforcement Gap</name>
+        <t>Human principals delegating transaction authority to
+        autonomous agents may wish to restrict transactions to
+        verified merchant entities. Without a machine-readable
+        merchant identity standard, such policies cannot be
+        enforced consistently across agent implementations.</t>
+      </section>
+      <section anchor="interoperability-absence">
+        <name>Interoperability Absence</name>
+        <t>Proprietary merchant verification mechanisms implemented
+        by individual agent platforms are not interoperable. A
+        merchant verified by one platform's mechanism provides
+        no assurance to a different platform. A common standard
+        eliminates this fragmentation.</t>
+      </section>
+    </section>
+    <section anchor="design-goals">
+      <name>Design Goals</name>
+      <dl>
+        <dt>G1. Verifiability:</dt>
+        <dd>Any relying party MUST be able to verify an MIA using
+        only the assertion document and publicly available key
+        material, without dependency on a central authority.</dd>
+        <dt>G2. Self-Hostability:</dt>
+        <dd>Any merchant MUST be able to publish an MIA without
+        registration with a central registry. Discovery via
+        well-known URI <xref target="RFC8615"/> enables decentralized
+        publication.</dd>
+        <dt>G3. Interoperability:</dt>
+        <dd>The MIA format MUST permit independent implementation
+        by any party. No proprietary extensions SHALL be
+        required for basic verification.</dd>
+        <dt>G4. Minimal Disclosure:</dt>
+        <dd>The MIA MUST contain only the fields necessary to
+        establish merchant identity. Trust scoring, ranking,
+        and behavioral data are explicitly out of scope.</dd>
+        <dt>G5. Composability:</dt>
+        <dd>The MIA MUST complement existing agent identity and
+        payment authorization protocols without requiring
+        modification to those protocols.</dd>
+      </dl>
+    </section>
+    <section anchor="non-goals">
+      <name>Non-Goals</name>
+      <t>The mechanism defined in this document is intentionally
+      narrow. The following are explicitly out of scope:</t>
+      <dl>
+        <dt>Trust scoring or reputation:</dt>
+        <dd>An MIA does not assert that a merchant is trustworthy,
+        reliable, well-behaved, financially solvent, or a good
+        commercial counterparty. It asserts only that a specific
+        legal entity has cryptographically bound identity claims
+        to a specific domain. Reputation, ratings, scoring, and
+        behavioral signals are out of scope.</dd>
+        <dt>Merchant ranking or discovery:</dt>
+        <dd>This document defines no mechanism for ranking,
+        prioritizing, recommending, or directing relying parties
+        toward any merchant. MIA verification produces a binary
+        outcome (the assertion is valid or it is not) and a set
+        of identity claims; it produces no ordering.</dd>
+        <dt>Endorsement or certification:</dt>
+        <dd>An MIA is not a certification, accreditation, or
+        endorsement. The presence of a valid MIA does not imply
+        that the issuer has audited, approved, or sanctioned the
+        merchant beyond verifying the identity claims contained
+        in the assertion.</dd>
+        <dt>Payment authorization:</dt>
+        <dd>This document defines no authorization, settlement,
+        clearing, or routing mechanism. Whether a verified
+        merchant should be paid, in what amount, by what
+        instrument, and under what terms is determined by the
+        relying party's policies and by separate payment
+        protocols.</dd>
+        <dt>Agent or principal identity:</dt>
+        <dd>This document defines no identity mechanism for
+        autonomous agents, the human or corporate principals on
+        whose behalf they act, or the platforms that operate them.
+        Agent identity is addressed by other specifications, with
+        which MIA is designed to compose.</dd>
+        <dt>Identity of natural persons:</dt>
+        <dd>This document concerns the identity of legal entities
+        (corporations, LLCs, partnerships, etc.) that operate
+        commercial domains. It is not a mechanism for verifying
+        the identity of individual natural persons. Sole
+        proprietor cases, where the legal entity and the natural
+        person coincide, are addressed only with the privacy
+        constraints in <xref target="privacy-considerations"/>.</dd>
+        <dt>A central registry:</dt>
+        <dd>No central registry, authority, or trusted third party
+        is defined or required. Each merchant, or a third party
+        explicitly authorized by the merchant, publishes its own
+        MIA. Relying parties may apply their own policies for
+        which issuers they trust.</dd>
+      </dl>
+      <t>Implementations and deployments MAY layer additional
+      capabilities on top of MIA verification (for example, a
+      relying party may consult external reputation services
+      after MIA verification succeeds). Such layers are out of
+      scope for this document and MUST NOT be implied by the
+      presence of a valid MIA alone.</t>
+    </section>
+    <section anchor="relationship-existing-work">
+      <name>Relationship to Existing Work</name>
+      <t>Several existing technologies address adjacent problems.
+      This section describes how MIA relates to each, and why
+      a distinct mechanism is proposed.</t>
+      <section anchor="rel-x509">
+        <name>X.509 and Web PKI</name>
+        <t>X.509 certificates bind a public key to a domain name,
+        and Extended Validation (EV) certificates additionally
+        attest to the legal entity operating the domain.
+        However, EV identity information is available in structured certificates at the TLS layer. MIA instead defines an application-level object with explicit discovery, issuer authorization, and verification-result semantics.
+        Certificate Transparency <xref target="RFC9162"/> provides
+        public auditability of certificate issuance but does
+        not surface legal entity claims in a form suitable for
+        machine evaluation. MIA produces a structured JSON
+        assertion that an agent can parse, validate, and retain
+        as an audit artifact alongside transaction records.</t>
+      </section>
+      <section anchor="rel-vc">
+        <name>W3C Decentralized Identifiers and Verifiable Credentials</name>
+        <t>The W3C Verifiable Credentials Data Model defines a
+        general framework for cryptographically verifiable
+        claims about a subject, and Decentralized Identifiers
+        (DIDs) define resolver-based identity. An MIA could in
+        principle be expressed as a constrained Verifiable
+        Credential profile. This document defines a narrower
+        mechanism intentionally: discovery via a single
+        well-known URI rather than DID resolution across
+        heterogeneous methods, a fixed claim schema scoped to
+        merchant identity, and a wire format optimized for
+        agent verification rather than holder presentation.
+        Future work MAY define an MIA-to-VC mapping for
+        deployments that require it.</t>
+      </section>
+      <section anchor="rel-oauth-dcr">
+        <name>OAuth Dynamic Client Registration</name>
+        <t>OAuth 2.0 Dynamic Client Registration <xref target="RFC7591"/>
+        enables a client to register identity metadata with an
+        authorization server. It addresses a different problem:
+        client onboarding within a trust relationship mediated
+        by an authorization server. MIA addresses
+        transaction-time merchant verification across trust
+        boundaries, with no central authorization server and
+        no prior registration relationship between the
+        verifying agent and the merchant.</t>
+      </section>
+      <section anchor="rel-spiffe">
+        <name>SPIFFE and Workload Identity</name>
+        <t>SPIFFE defines workload identity within a trust domain,
+        typically a single organization or federation thereof.
+        MIA addresses cross-organization identity verification
+        between parties with no pre-established trust
+        relationship.</t>
+      </section>
+      <section anchor="rel-dns">
+        <name>DNS-Based Identity (DANE, TLSA)</name>
+        <t>DNS-based mechanisms such as DANE <xref target="RFC6698"/>
+        bind keys or certificates to domain names via DNSSEC.
+        MIA uses DNS only as one of two third-party
+        authorization mechanisms (<xref target="third-party-auth"/>) and
+        carries the structured legal entity claims that DNS
+        records are not designed to convey. A future profile
+        MAY define a DNS record type for MIA discovery; this
+        document defines HTTPS well-known URI discovery as the
+        primary mechanism for compatibility with the broader
+        deployment of HTTPS over DNSSEC.</t>
+      </section>
+      <section anchor="rel-runtime-evidence">
+        <name>Agent Runtime and Execution Evidence</name>
+        <t>Agent Manifest <xref target="AGENT-MANIFEST"/>, cMCP <xref target="CMCP"/>, and TRACE <xref target="TRACE"/> concern agent configuration, controlled tool execution, and evidence about an execution. MIA concerns the legal entity claims associated with the merchant domain. Neither merchant identity nor a signature over it is an agent identity or a hardware measurement. The optional profile in <xref target="runtime-profile"/> gives a runtime a transaction-bound verification result, and <xref target="agentrust-mapping"/> describes a proposed mapping to these external projects.</t>
+      </section>
+    </section>
+    <section anchor="mia">
+      <name>Merchant Identity Assertion</name>
+      <t>An MIA is a JSON <xref target="RFC8259"/> document served with media
+      type application/merchant-identity+json (<xref target="media-type"/>).
+      It consists of a Claims Object (<xref target="claim-fields-required"/> and <xref target="claim-fields-optional"/>)
+      and an embedded Proof Object (<xref target="proof-object"/>).</t>
+      <t>The Claims Object is the canonical input to the signing
+      procedure. The Proof Object records the resulting
+      signature and key reference. Both are serialized together
+      as a single JSON document on the wire (<xref target="wire-format"/>).</t>
+      <section anchor="claim-fields-required">
+        <name>Claim Fields (Required)</name>
+        <dl>
+          <dt>version (integer):</dt>
+          <dd>The MIA specification version. This document defines
+          version 1. Implementations MUST reject assertions with
+          unrecognized version values.</dd>
+          <dt>subject (string):</dt>
+          <dd>The subject domain. MUST be a fully qualified domain
+          name (FQDN) expressed in lowercase. MUST match the
+          domain from which the assertion is served or the domain
+          for which the issuer holds explicit authorization per
+          <xref target="third-party-auth"/>.</dd>
+          <dt>legalName (string):</dt>
+          <dd>The registered legal name of the merchant entity as
+          it appears in the jurisdiction of incorporation or
+          registration.</dd>
+          <dt>entityType (string):</dt>
+          <dd>The legal entity type. MUST be one of: "corporation",
+          "llc", "partnership", "sole_proprietor",
+          "cooperative", "nonprofit", "government", or "other".</dd>
+          <dt>jurisdiction (string):</dt>
+          <dd>The ISO 3166-1 alpha-2 country code of the primary
+          jurisdiction of registration (e.g., "US", "GB", "DE").
+          Where a subdivision-level identifier is available and
+          relevant, implementors MAY use an ISO 3166-2 code
+          (e.g., "US-AZ") in the extensions field.</dd>
+          <dt>issuedAt (string):</dt>
+          <dd>The UTC datetime at which this assertion was issued,
+          in RFC 3339 format (e.g., "2026-04-15T00:00:00Z").</dd>
+          <dt>expiresAt (string):</dt>
+          <dd>The UTC datetime after which this assertion MUST NOT
+          be accepted, in RFC 3339 format. Issuers SHOULD NOT
+          set validity periods exceeding 365 days.</dd>
+          <dt>issuer (object):</dt>
+          <dd>
+            <t>An object identifying the signing entity. MUST contain:</t>
+            <dl>
+              <dt>name (string):</dt>
+              <dd>Human-readable issuer name.</dd>
+              <dt>domain (string):</dt>
+              <dd>Issuer FQDN.</dd>
+              <dt>keyDirectory (string):</dt>
+              <dd>HTTPS URI of the issuer's Key Directory (<xref target="key-directory"/>).</dd>
+            </dl>
+          </dd>
+        </dl>
+      </section>
+      <section anchor="claim-fields-optional">
+        <name>Claim Fields (Optional)</name>
+        <dl>
+          <dt>registrationId (string):</dt>
+          <dd>A jurisdiction-specific business registration
+          identifier (e.g., EIN, Companies House number,
+          GLEIF LEI <xref target="LEI"/>).</dd>
+          <dt>evidenceUris (array of strings):</dt>
+          <dd>HTTPS URIs referencing third-party authoritative
+          records that corroborate the identity claims in this
+          assertion (e.g., a public government business
+          registry record, a GLEIF LEI record). Each URI MUST
+          be publicly accessible over HTTPS without
+          authentication. Failure to retrieve or parse an
+          evidenceUris value (network failure, non-200 HTTP
+          status, redirect to an authentication-gated resource,
+          or unparseable response) does not, by itself,
+          invalidate the MIA. Relying parties MAY define
+          policies (per <xref target="issuance-policy"/>) that
+          condition acceptance on successful evidence retrieval
+          for high-value or regulated transactions; such
+          policies are deployment-specific and out of scope
+          for this document.</dd>
+          <dt>extensions (object):</dt>
+          <dd>A JSON object for implementation-specific fields.
+          Relying parties MUST ignore unrecognized keys.
+          Extension keys MUST use reverse domain notation
+          (e.g., "com.example.customField").</dd>
+        </dl>
+        <t>A recognized optional top-level revocationUri string MAY identify an HTTPS status endpoint operated by the issuer. Its semantics are defined in <xref target="rev-explicit"/>. Implementation-specific extension members still use reverse-domain names inside extensions. Unrecognized top-level claim fields MUST be retained when reconstructing the signing input; an unknown claim MUST NOT be silently deleted before signature verification.</t>
+      </section>
+      <section anchor="proof-object">
+        <name>Proof Object</name>
+        <t>The proof field MUST be an object with exactly the following members. Fields not listed here MUST be rejected for MerchantIdentityProof-v1.</t>
+        <dl>
+          <dt>type:</dt>
+          <dd>The string MerchantIdentityProof-v1.</dd>
+          <dt>alg:</dt>
+          <dd>The string Ed25519. Implementations MUST reject unrecognized algorithms and MUST NOT infer an algorithm from key material.</dd>
+          <dt>created:</dt>
+          <dd>An RFC 3339 UTC timestamp exactly equal to issuedAt.</dd>
+          <dt>verificationMethod:</dt>
+          <dd>For an MIA, the issuer.keyDirectory HTTPS URI followed by a single # and a nonempty URL-safe kid. The directory URI MUST have no fragment, user information, or query. For an MIA its host MUST equal issuer.domain under the Domain Comparison rules. For an MIDD, use a subject-domain HTTPS Key Directory followed by # and kid; the MIDD has no issuer.keyDirectory claim, so host binding is instead to its signed subject. For an MIA the directory portion MUST equal issuer.keyDirectory byte for byte; default port 443 MAY be explicit but no other port is permitted by this profile.</dd>
+          <dt>proofValue:</dt>
+          <dd>The 64-byte Ed25519 signature encoded as unpadded base64url.</dd>
+        </dl>
+        <t>The proof is excluded from the signed Claims Object. Consequently every proof member MUST be checked against its fixed value or the corresponding signed claim before acceptance. The key directory URI locates a key; it does not establish the truth of the identity claims or make the issuer trusted. Both key-directory references originate in the supplied document. A relying party MUST apply independently configured issuer-trust policy for any conclusion beyond domain-authorized assertion validity.</t>
+        <t>A self-issued assertion obtains its domain binding from authenticated HTTPS retrieval at the expected subject domain, with keys on that domain. A third-party assertion additionally requires merchant authorization as specified in <xref target="third-party-auth"/>. Fetching keys from an attacker-selected issuer cannot bootstrap legal-entity assurance.</t>
+      </section>
+      <section anchor="wire-format">
+        <name>Wire Format</name>
+        <t>An MIA is serialized as a single JSON document. The
+        Claims Object fields (<xref target="claim-fields-required"/> and <xref target="claim-fields-optional"/>) and the
+        proof field (<xref target="proof-object"/>) appear at the top level of
+        this JSON document.</t>
+        <t>The document MUST be served over HTTPS with:</t>
+        <artwork>Content-Type: application/merchant-identity+json</artwork>
+        <t>Implementations MUST NOT serve or accept MIA documents
+        over plain HTTP.</t>
+      </section>
+      <section anchor="versioning">
+        <name>Versioning</name>
+        <t>The version field in the Claims Object identifies
+        the MIA specification version, not the issuer's
+        software version or assertion content version. This
+        document defines version 1.</t>
+        <t>The version field follows a strict-rejection model:
+        relying parties MUST reject assertions with unrecognized
+        version values. New claim fields, optional or required,
+        do not increment the version number; they are added
+        through extensions (<xref target="claim-fields-optional"/>)
+        or through new optional fields defined by future documents
+        that update this specification.</t>
+        <t>The version number is incremented only when an
+        incompatible structural change is made to the Claims
+        Object such that an implementation built to an earlier
+        version could not safely interpret the assertion.
+        Examples of incompatible changes include: removal of a
+        required field, change in the canonicalization algorithm,
+        or change in the meaning of an existing field.</t>
+        <t>The proof.type field follows the same model
+        independently. The version number in the proof type
+        identifier (currently "MerchantIdentityProof-v1")
+        increments only on incompatible changes to the proof
+        envelope structure itself, distinct from algorithm
+        changes (which are signaled via proof.alg per
+        <xref target="crypto-agility"/>).</t>
+      </section>
+      <section anchor="example">
+        <name>Example</name>
+        <t>The following is a non-normative example of a complete
+        signed MIA document:</t>
+        <sourcecode type="json">{
+  "version": 1,
+  "subject": "supplier.example.com",
+  "legalName": "Example Supply Corporation",
+  "entityType": "corporation",
+  "jurisdiction": "US",
+  "issuedAt": "2026-04-15T00:00:00Z",
+  "expiresAt": "2027-04-15T00:00:00Z",
+  "issuer": {
+    "name": "Example Trust Registry",
+    "domain": "trust.example.org",
+    "keyDirectory": "https://trust.example.org/.well-known/jwks.json"
+  },
+  "registrationId": "12-3456789",
+  "evidenceUris": [
+    "https://www.gleif.org/lei/5493001KJTIIGC8Y1R12"
+  ],
+  "proof": {
+    "type": "MerchantIdentityProof-v1",
+    "alg": "Ed25519",
+    "created": "2026-04-15T00:00:00Z",
+    "verificationMethod":
+      "https://trust.example.org/.well-known/jwks.json#key-01",
+    "proofValue": "z3FXQjecMBCm...base64url-signature"
+  }
+}</sourcecode>
+      </section>
+    </section>
+    <section anchor="discovery">
+      <name>Discovery</name>
+      <section anchor="well-known-uri">
+        <name>Well-Known URI</name>
+        <t>A merchant MAY self-issue an MIA and publish it at:</t>
+        <artwork>https://{subject-domain}/.well-known/merchant-identity.json</artwork>
+        <t>This resource MUST be served over HTTPS with:</t>
+        <artwork>Content-Type: application/merchant-identity+json</artwork>
+        <t>A relying party wishing to obtain an MIA for a given
+        merchant domain SHOULD first attempt retrieval from this
+        well-known URI.</t>
+        <t>For a self-issued MIA, the issuer.domain field MUST
+        equal the subject field, and the issuer.keyDirectory
+        MUST resolve to a Key Directory at the subject domain.</t>
+      </section>
+      <section anchor="third-party-auth">
+        <name>Third-Party Issuer Authorization</name>
+        <t>Merchants MAY authorize a third-party issuer to publish
+        an MIA on their behalf. Before relying on a third-party
+        MIA, the relying party MUST verify that the issuer is
+        authorized by the subject domain using one of the
+        following mechanisms:</t>
+        <t>a) DNS TXT Authorization Record:</t>
+        <t>The subject domain MUST publish a DNS TXT record at
+        the name _mia-auth.{subject-domain}:</t>
+        <artwork>_mia-auth.supplier.example.com. IN TXT (
+  "v=mia1; issuer=trust.example.org")</artwork>
+        <t>The issuer value MUST exactly match the issuer.domain
+        field in the MIA.</t>
+        <t>b) HTTP Delegation Document:</t>
+        <t>The subject domain MUST publish a Merchant Identity
+        Delegation Document (MIDD) at:</t>
+        <artwork>https://{subject-domain}/.well-known/mia-delegation.json</artwork>
+        <t>An MIDD is a distinct document type from an MIA. It
+        MUST be a JSON object signed using the same proof
+        structure defined in <xref target="proof-object"/> and MUST contain:</t>
+        <dl>
+          <dt>version (integer):</dt>
+          <dd>MUST be 1.</dd>
+          <dt>type (string):</dt>
+          <dd>MUST be "MerchantIdentityDelegation".</dd>
+          <dt>subject (string):</dt>
+          <dd>The merchant domain granting delegation.</dd>
+          <dt>authorizedIssuer (string):</dt>
+          <dd>The FQDN of the authorized third-party issuer.</dd>
+          <dt>issuedAt (string):</dt>
+          <dd>RFC 3339 datetime.</dd>
+          <dt>expiresAt (string):</dt>
+          <dd>RFC 3339 datetime.</dd>
+          <dt>proof (object):</dt>
+          <dd>Per <xref target="proof-object"/>, signed by a key published at the subject domain's Key Directory.</dd>
+        </dl>
+        <t>The MIDD MUST be served over HTTPS with:</t>
+        <artwork>Content-Type: application/merchant-delegation+json</artwork>
+        <t>Relying parties MUST verify the MIDD proof using a key
+        hosted at the subject domain's Key Directory before
+        accepting the named issuer as authorized. See
+        <xref target="media-type-midd"/> for the media type
+        registration.</t>
+        <t>A subject domain that authorizes a third-party issuer
+        via MIDD MUST publish a Key Directory at the location
+        identified by the proof.verificationMethod field of the
+        MIDD itself. The Key Directory MUST contain the public
+        key whose corresponding private key signed the MIDD.
+        This Key Directory is operated by the subject domain
+        and is distinct from any Key Directory operated by the
+        third-party issuer to which delegation is granted. A
+        subject domain that uses only DNS TXT third-party
+        authorization (mechanism a) is not required to operate
+        a Key Directory.</t>
+        <t>Relying parties MUST treat an MIA as invalid if neither
+        authorization mechanism is satisfied.</t>
+      </section>
+    </section>
+    <section anchor="issuance-models">
+      <name>Issuance Models and Assurance Considerations</name>
+      <t>An MIA is structurally valid if it satisfies the
+      verification procedure in <xref target="verification-procedure"/>.
+      Structural validity is a necessary condition for relying on
+      an assertion, but it is not, by itself, a sufficient
+      condition for high-assurance use.</t>
+      <t>This document defines no normative assurance levels.
+      However, the protocol surfaces enough information for a
+      relying party to apply its own policies. This section
+      describes the issuance models the protocol supports and
+      the corresponding signals available to relying parties.</t>
+      <section anchor="issuance-self">
+        <name>Self-Issuance</name>
+        <t>A merchant may self-issue an MIA: the issuer.domain
+        equals the subject, and the assertion is signed by a
+        key published at the subject domain's Key Directory.
+        Self-issuance demonstrates control of the subject domain
+        at the time of signing and provides cryptographic
+        attribution of the claims to whoever controls the
+        domain. It does not, by itself, demonstrate that the
+        legal entity claims (legalName, entityType, jurisdiction,
+        registrationId) correspond to the actual entity operating
+        the domain.</t>
+      </section>
+      <section anchor="issuance-third-party">
+        <name>Third-Party Issuance</name>
+        <t>A merchant may authorize a third-party issuer per
+        <xref target="third-party-auth"/>. The relying party can
+        then evaluate the assertion as the joint product of two
+        signals: the merchant's authorization of the issuer
+        (proven by the DNS TXT record or signed delegation
+        document at the subject domain) and the issuer's
+        attestation to the merchant's identity claims. The
+        strength of the resulting assurance depends on the
+        practices of the named issuer, which are out of scope
+        for this document.</t>
+      </section>
+      <section anchor="issuance-evidence">
+        <name>External Evidence</name>
+        <t>An MIA MAY include the optional evidenceUris field
+        (<xref target="claim-fields-optional"/>), referencing
+        publicly accessible authoritative records that
+        corroborate identity claims (for example, a GLEIF LEI
+        record, a government business registry entry, or a
+        public regulator filing). The evidenceUris field allows
+        a relying party, or an automated verification service
+        acting on the relying party's behalf, to check the
+        consistency of the MIA's claims against independent
+        sources at verification time.</t>
+        <t>This document does not require relying parties to
+        fetch or validate evidenceUris. Implementations MAY
+        define policies that condition acceptance on successful
+        evidence retrieval and consistency checks; such
+        policies are deployment-specific.</t>
+      </section>
+      <section anchor="issuance-policy">
+        <name>Relying Party Policy</name>
+        <t>Relying parties operating in regulated, high-value, or
+        otherwise high-stakes contexts SHOULD define explicit
+        policies for which issuance models they accept. Examples
+        of policies a relying party MAY adopt include:</t>
+        <ul>
+          <li>Accept only third-party-issued MIAs from issuers on
+          a maintained allowlist.</li>
+          <li>Accept self-issued MIAs only for transactions below
+          a configured threshold.</li>
+          <li>Require an evidenceUris value resolving to a GLEIF
+          LEI record for transactions exceeding a configured
+          threshold.</li>
+          <li>Require a fresh assertion (recently retrieved from
+          the well-known URI rather than served from cache) for
+          transactions within a defined recency window.</li>
+        </ul>
+        <t>Such policies are out of scope for this specification.
+        The protocol exposes the inputs; the policy decisions
+        belong to the relying party and its principals.</t>
+      </section>
+    </section>
+    <section anchor="signing-and-verification">
+      <name>Signing and Verification</name>
+      <section anchor="signing-algorithm">
+        <name>Signing Algorithm</name>
+        <t>This document defines a single mandatory-to-implement
+        signature algorithm: the Edwards-Curve Digital Signature
+        Algorithm (EdDSA) with the Ed25519 curve
+        <xref target="RFC8032"/>, identified in the proof.alg
+        field as "Ed25519". All conforming issuers and relying
+        parties MUST support this algorithm.</t>
+        <t>Future specifications MAY define additional algorithm
+        identifiers; see <xref target="crypto-agility"/> for the
+        extension model and post-quantum migration considerations.</t>
+      </section>
+      <section anchor="key-directory">
+        <name>Key Directory</name>
+        <t>Issuers MUST publish a JSON Web Key Set <xref target="RFC7517"/>
+        at the HTTPS URI in the issuer.keyDirectory field.
+        This document is the Key Directory.</t>
+        <t>Key Directory entries used for MIA signing with the
+        Ed25519 algorithm MUST include:</t>
+        <dl>
+          <dt>kty:</dt>
+          <dd>"OKP"</dd>
+          <dt>crv:</dt>
+          <dd>"Ed25519"</dd>
+          <dt>use:</dt>
+          <dd>"sig"</dd>
+          <dt>kid:</dt>
+          <dd>A stable, unique, URL-safe identifier.</dd>
+          <dt>x:</dt>
+          <dd>The base64url-encoded Ed25519 public key.</dd>
+        </dl>
+        <t>JWK parameters MUST be appropriate for the algorithm
+        identified in the proof.alg field of the assertion the
+        key is used to verify, per <xref target="RFC7517"/>.
+        Specifications defining additional algorithm identifiers
+        (<xref target="crypto-agility"/>) MUST specify the
+        corresponding JWK parameter requirements.</t>
+        <t>The Key Directory MUST be served over HTTPS with
+        appropriate HTTP caching headers. Relying parties
+        SHOULD cache key material per those headers to reduce
+        verification latency and network load. Implementations
+        MUST NOT cache key material beyond the lifetime indicated
+        by the HTTP cache directives, and MUST re-fetch on
+        signature verification failure to accommodate key
+        rotation. Issuers SHOULD set cache lifetimes that
+        balance verification performance against key rotation
+        responsiveness; values between one hour and 24 hours
+        are RECOMMENDED.</t>
+        <t>Unexpired keys cached from a previously successful, authenticated retrieval MAY be used within their HTTP freshness lifetime, subject to any stricter relying-party revocation policy. If no permitted fresh cache entry exists and the directory cannot be retrieved, the result MUST be indeterminate and MUST NOT be reported as verified. Expired keys MUST NOT be used as an availability fallback. A missing kid or failed signature MAY trigger one fresh retrieval; repeated refresh loops MUST be bounded.</t>
+      </section>
+      <section anchor="signing-procedure">
+        <name>Signing Procedure</name>
+        <ol>
+          <li>Construct the complete Claims Object with all claims to be published, excluding proof.</li>
+          <li>Validate its JSON types and required fields. Reject duplicate member names, non-finite numbers, invalid Unicode, and values outside the RFC 8785 input domain.</li>
+          <li>Apply RFC 8785 JSON Canonicalization Scheme <xref target="RFC8785"/> in full. Simple key sorting and whitespace removal are insufficient: property ordering, number serialization, escaping, and Unicode handling MUST follow JCS.</li>
+          <li>Sign the resulting UTF-8 bytes with the Ed25519 private key corresponding to the named kid.</li>
+          <li>Construct proof with type, alg, created, verificationMethod, and the unpadded base64url proofValue. created MUST equal issuedAt.</li>
+          <li>Attach proof to the unchanged Claims Object and publish the resulting JSON document.</li>
+        </ol>
+      </section>
+      <section anchor="verification-procedure">
+        <name>Verification Procedure</name>
+        <t>A verifier MUST obtain the expected merchant domain from the relying party's transaction context, not solely from the assertion being evaluated, and MUST perform the following checks:</t>
+        <ol>
+          <li>Retrieve the MIA using authenticated HTTPS. For well-known discovery, use the expected subject domain. A third-party document may be delivered through a separately configured route, but that route does not replace merchant authorization checks. Do not automatically follow redirects. Reject failed retrieval, invalid TLS, non-success status, and responses exceeding a configured size limit; 64 KiB to 1 MiB is RECOMMENDED.</li>
+          <li>Require application/merchant-identity+json. Parse strict JSON with duplicate-member rejection and validate every required claim, field type, version, timestamp, domain, and entityType. Reject a missing or malformed proof and unknown version, proof type, or algorithm.</li>
+          <li>Check proof.created equals issuedAt. Validate proof.verificationMethod and its equality to the signed keyDirectory as specified in <xref target="proof-object"/>.</li>
+          <li>Resolve the issuer Key Directory under <xref target="key-directory"/> and <xref target="fetch-safety"/>. Find exactly one matching kid. Require kty OKP, crv Ed25519, use sig, a 32-byte x value, and no private d value. If a JWK declares alg or key_ops, those declarations MUST permit this signature verification and MUST NOT contradict Ed25519.</li>
+          <li>Reconstruct JCS over the entire received object with only proof removed. Verify the signature using the selected public key.</li>
+          <li>Require issuedAt &lt;= now &lt; expiresAt and expiresAt &gt; issuedAt. The runtime profile defines its stricter recency requirements separately. Comparison uses parsed instants, not lexical string comparison.</li>
+          <li>Match subject to the independently supplied merchant domain using Domain Comparison. For self-issuance require issuer.domain equal subject and keys hosted at the subject domain.</li>
+          <li>For third-party issuance require current authorization from the subject domain under <xref target="third-party-auth"/>. An MIDD MUST have a recognized version and type, match the expected subject and authorized issuer, be unexpired, and verify using subject-domain keys.</li>
+          <li>Apply any required revocation check. A revoked assertion MUST NOT be accepted. If required status is unavailable or stale, report an indeterminate result rather than success.</li>
+        </ol>
+        <t>Success establishes an authentic, domain-authorized, unexpired assertion under these checks. It does not establish independent verification of the legal entity or authorize a payment. Relying parties MUST apply the assurance policy described in <xref target="issuance-models"/>. A failed check MUST NOT be converted to verified by fallback or a permissive default.</t>
+      </section>
+    </section>
+    <section anchor="freshness-and-revocation">
+      <name>Freshness and Revocation</name>
+      <t>This document distinguishes two categories of change
+      that affect the validity of a previously issued MIA:</t>
+      <dl>
+        <dt>Identity revocation:</dt>
+        <dd>A material change to the legal entity claims in the
+        MIA (e.g., legal name change, jurisdiction change,
+        dissolution, loss of business registration, or transfer
+        of the subject domain to a different legal entity).
+        Identity revocation invalidates the assertion's claims
+        regardless of cryptographic validity.</dd>
+        <dt>Operational revocation:</dt>
+        <dd>A change to the issuer's signing infrastructure
+        (e.g., key compromise, key rotation, or suspension of
+        issuance) that affects the cryptographic validity of
+        outstanding assertions but does not change the
+        underlying identity claims.</dd>
+      </dl>
+      <t>The protocol addresses these two categories through
+      complementary mechanisms.</t>
+      <section anchor="rev-validity-period">
+        <name>Validity Periods and Re-Issuance</name>
+        <t>Relying parties MUST NOT accept assertions for which
+        the current time is at or after the expiresAt value.</t>
+        <t>Issuers SHOULD limit assertion validity periods.
+        Validity periods of 90 days or less are RECOMMENDED for
+        issuers with automated re-issuance pipelines.</t>
+        <t>Issuers MUST re-issue assertions promptly when material
+        identity information changes. Re-issuance is the primary
+        mechanism for identity revocation; the previous assertion
+        is allowed to expire on its own schedule unless explicit
+        revocation is also signaled.</t>
+        <t>Relying parties in high-stakes or regulated contexts
+        SHOULD retrieve a fresh assertion rather than relying on
+        a cached copy when the cached copy is older than 24 hours,
+        regardless of the expiresAt value.</t>
+        <t>Issuers MAY set HTTP cache directives on the MIA
+        endpoint. Relying parties MAY honor these directives but
+        MUST NOT cache an MIA beyond its expiresAt value
+        regardless of HTTP cache headers, and MUST NOT cache an
+        MIA whose Cache-Control directives explicitly forbid
+        caching. Where issuer-supplied cache directives permit
+        caching beyond the recency thresholds defined in this
+        section, the more restrictive policy applies.</t>
+      </section>
+      <section anchor="rev-explicit">
+        <name>Explicit Revocation</name>
+        <t>The optional signed revocationUri claim identifies an issuer-operated HTTPS status endpoint. The response MUST include subject, miaDigest, revoked, checkedAt, and nextUpdate. subject MUST match the MIA subject; miaDigest MUST equal the digest of the complete MIA defined in <xref target="runtime-digests"/>. revoked is a boolean, and both times are RFC 3339 UTC strings. The verifier MUST reject a response for a different assertion, an invalid time interval, or a time at or beyond nextUpdate.</t>
+        <t>A true revoked value invalidates the assertion. A false value means only that this issuer reports it unrevoked at checkedAt. It does not establish current business standing. Core MIA deployments MAY omit explicit status checking; the runtime profile requires a fresh revocation determination under its criteria. An unavailable required status source is indeterminate, not unrevoked.</t>
+        <t>Changing the published assertion does not immediately invalidate cached copies. Deployments requiring prompt invalidation MUST use an explicit status mechanism and bounded cache lifetimes. TLS-authenticated status retrieval alone is not a portable proof of a historical response; archival assurance requires a signed source statement or a separately trusted verification appraisal.</t>
+      </section>
+      <section anchor="rev-key-rotation">
+        <name>Key Rotation</name>
+        <t>Operational revocation through signing-key rotation
+        is supported by the Key Directory mechanism
+        (<xref target="key-directory"/>). When an issuer rotates
+        keys, it removes the old key from its Key Directory.
+        Relying parties that follow the cache requirements in
+        <xref target="key-directory"/> will fail signature
+        verification on assertions signed with revoked keys
+        once the cache lifetime elapses.</t>
+        <t>Issuers MUST remove compromised keys from the Key
+        Directory without delay and SHOULD re-issue all
+        outstanding assertions previously signed with the
+        compromised key.</t>
+      </section>
+    </section>
+    <section anchor="ert">
+      <name>Evaluation Result Token</name>
+      <t>A verification service MAY issue an Evaluation Result Token (ERT) after evaluating an MIA. The ERT is a signed JWT that records the result, including unsuccessful or indeterminate checks. An ERT is the verification service's statement and requires independent trust in that service; it is not payment authorization. The legacy ERT below remains available. The optional runtime profile adds required context and assurance claims without changing the MIA version 1 wire format.<xref target="RFC7519"/> that serves as a portable
+      audit artifact confirming that verification was
+      performed.</t>
+      <t>The ERT is an optional layer. Its issuance does not
+      alter the validity of the underlying MIA.</t>
+      <section anchor="ert-claims">
+        <name>Claims</name>
+        <dl>
+          <dt>iss (string, REQUIRED):</dt>
+          <dd>The domain of the verification service.</dd>
+          <dt>sub (string, REQUIRED):</dt>
+          <dd>The subject domain that was verified.</dd>
+          <dt>iat (NumericDate, REQUIRED):</dt>
+          <dd>Time of ERT issuance.</dd>
+          <dt>exp (NumericDate, REQUIRED):</dt>
+          <dd>Expiry time. MUST NOT exceed iat + 300 seconds to limit replay exposure.</dd>
+          <dt>jti (string, REQUIRED):</dt>
+          <dd>An identifier containing at least 128 bits of cryptographically random entropy. It is unique within the issuer scope and supports replay detection.</dd>
+          <dt>mia_verified (boolean, REQUIRED):</dt>
+          <dd>True if a valid, unexpired MIA was located and successfully verified for the subject domain per <xref target="verification-procedure"/>. False otherwise.</dd>
+          <dt>mia_subject (string, REQUIRED when mia_verified is true):</dt>
+          <dd>The subject field from the verified MIA.</dd>
+          <dt>mia_issued_at (string, REQUIRED when mia_verified is true):</dt>
+          <dd>The issuedAt field from the verified MIA.</dd>
+          <dt>mia_issuer_domain (string, REQUIRED when mia_verified is true):</dt>
+          <dd>The issuer.domain field from the verified MIA.</dd>
+        </dl>
+        <t>No consumer or agent identity fields SHALL be included
+        in an ERT without explicit principal consent.</t>
+      </section>
+      <section anchor="ert-signing">
+        <name>Signing</name>
+        <t>The ERT MUST be signed as a JWS <xref target="RFC7515"/> using
+        EdDSA with Ed25519 <xref target="RFC8032"/>. The JWS Protected
+        Header MUST include:</t>
+        <dl>
+          <dt>alg:</dt>
+          <dd>"EdDSA"</dd>
+          <dt>kid:</dt>
+          <dd>Key identifier in the verification service's Key Directory.</dd>
+        </dl>
+        <t>Implementations MUST follow JWT Best Current Practices
+        <xref target="RFC8725"/>, including algorithm validation and rejection
+        of the none algorithm.</t>
+        <t>ERT keys MUST be authorized for the claimed verification-service issuer by the relying party's independently configured trust store. A key supplied only by the token or a token-selected remote location is insufficient. Receivers MUST NOT follow jku or x5u from an untrusted token. Unknown critical headers and unsigned tokens MUST be rejected.</t>
+      </section>
+      <section anchor="ert-example">
+        <name>Example</name>
+        <t>The following is a non-normative example of a decoded
+        ERT payload:</t>
+        <sourcecode type="json">{
+  "iss": "trust.example.org",
+  "sub": "supplier.example.com",
+  "iat": 1776211200,
+  "exp": 1776211500,
+  "jti": "597d4f317ac44fd09f41f6c61d5d41d0",
+  "mia_verified": true,
+  "mia_subject": "supplier.example.com",
+  "mia_issued_at": "2026-04-15T00:00:00Z",
+  "mia_issuer_domain": "trust.example.org"
+}</sourcecode>
+        <t>A relying party MAY include the ERT in payment
+        metadata or transaction records to provide downstream
+        parties with a verifiable audit artifact that
+        pre-transaction merchant identity verification
+        occurred.</t>
+      </section>
+    </section>
+    <section anchor="runtime-profile">
+      <name>Optional Agent Runtime Integration Profile</name>
+      <t>This section defines profile identifier https://registeredbrands.ai/profiles/mia-runtime/v1 (MIA-RT1). It is an identifier defined by this document; dereferencing it is not required. The profile is optional for core MIA implementations. Every MUST in this section applies to implementations claiming MIA-RT1. A deployment MUST explicitly select this profile and MUST NOT silently downgrade to a legacy ERT when a required profile field is missing.</t>
+      <t>The profile leaves core MIA version 1, merchant discovery, and its existing proof format intact. It defines a verification result and a pre-action gate, not a payment authorization protocol, settlement mechanism, reputation score, or hardware assurance level. Payment authority and recipient ownership evidence remain separate inputs.</t>
+      <section anchor="runtime-roles">
+        <name>Roles and Processing Order</name>
+        <dl>
+          <dt>Merchant issuer:</dt>
+          <dd>Publishes and signs the merchant identity assertion.</dd>
+          <dt>Verification service:</dt>
+          <dd>Checks that assertion and independent evidence against named criteria and signs the result.</dd>
+          <dt>Enforcing gateway:</dt>
+          <dd>Authenticates the requesting agent, constructs the request context, verifies the result under its own trust configuration, evaluates policy, and dispatches the exact approved request.</dd>
+          <dt>Payment service:</dt>
+          <dd>Determines payment authority and supplies or verifies evidence connecting the legal entity to the actual recipient.</dd>
+          <dt>Audit consumer:</dt>
+          <dd>Inspects independently retained assertions, results, criteria, and execution evidence under its own trust policy.</dd>
+        </dl>
+        <t>These roles may share an operator, but each trust decision MUST be explicit. The gateway MUST prepare the request and criteria before verification; obtain and authenticate the result; verify exact request, freshness, and criteria bindings; evaluate policy; atomically consume the result; and then dispatch that same request. An audit record created after dispatch cannot substitute for a pre-action check.</t>
+      </section>
+      <section anchor="runtime-digests">
+        <name>Canonical Digests</name>
+        <t>All digest values in this profile have the form sha256: followed by 64 lowercase hexadecimal characters. For JSON object X, digest(X) is SHA-256 over its complete RFC 8785 canonical UTF-8 representation. No member is omitted unless this document explicitly specifies a signature preimage. The MIA digest includes proof. The criteria and request-context digests cover every supplied member. The appraisal reference digest includes signature. The ERT digest is SHA-256 over the exact ASCII compact-JWS token, without a trailing newline.</t>
+        <t>Signed documents and digest inputs MUST be parsed with duplicate-key rejection and full JCS validation. This profile uses integers within the interoperable IEEE 754 safe-integer range and represents amounts as decimal integer strings. Altered canonical data MUST produce a different digest or be rejected.</t>
+      </section>
+      <section anchor="runtime-criteria">
+        <name>Verification Criteria and Results</name>
+        <t>A criteria object MUST identify its id and version, accepted merchant issuers, required checks, maximum evidence age as an integer from 1 to 300 seconds, and whether payment-recipient binding is required. The gateway MUST obtain approved criteria independently of the token being evaluated and pin their digest. Trust-store contents and authorized verifier keys MUST also be independently configured. A criteria URL supplied by a receipt does not authorize a new policy or key.</t>
+        <t>Each check has one of four values: pass, fail, indeterminate, or not_checked. The fixed check names are assertion_signature, merchant_domain, merchant_authorization, issuer_trust, identity_evidence, revocation, and payment_recipient_binding. All seven names MUST appear in a runtime ERT. A non-payment deployment may mark payment_recipient_binding not_checked only when its approved criteria do not require that check.</t>
+        <t>A pass for identity_evidence requires matching the domain-associated legal entity claims to independently obtained, authoritative identity records under the stated criteria. The evidence MUST identify the registry or authority, the registration identifier, applicable jurisdiction, and when the check occurred. A merchant's own signature or an unchecked evidence URI MUST NOT satisfy this check. A pass for payment_recipient_binding additionally requires independently trusted evidence associating that same legal entity with the recipient in the exact payment request; hashing a recipient identifier is not proof of ownership.</t>
+        <t>assertion_signature, merchant_domain, merchant_authorization, issuer_trust, identity_evidence, and revocation MUST be required checks. The payment check MUST also be required for a payment operation. Result pass is permitted only when every required check passes. Result fail means at least one required check definitively failed. Otherwise the result is indeterminate. Unavailable evidence MUST NOT be reported as fail unless a negative finding exists, and MUST NOT be reported as pass.</t>
+        <t>A token MUST record evidence_checked_at, meaning the earliest check time among the evidence relied upon. The gateway MUST enforce the maximum evidence age and all source validity limits. Token issuance time is not a substitute for evidence recency. Revocation must be checked by a source and method required by the criteria; absence of an available required source yields indeterminate.</t>
+      </section>
+      <section anchor="runtime-request">
+        <name>Request Context and Recipient Binding</name>
+        <t>The gateway MUST construct a context object containing version 1, profile, merchant_domain, operation, tool_id, call_id, session_binding, request_nonce, and parameters. profile MUST equal the MIA-RT1 identifier. operation is payment or merchant_check. session_binding is a freshly generated opaque session handle, and request_nonce contains at least 128 bits of cryptographically random entropy, encoded as unpadded base64url. The gateway MUST obtain identity and session association from authenticated runtime state, not from the model's assertions.</t>
+        <t>parameters MUST capture all inputs that can change the action. For payment, it MUST include recipient with scheme and identifier, amount_minor as a non-negative decimal integer string, and an uppercase three-letter currency. Bind any invoice, order, network, chain, or routing identifier that can change the destination or obligation. The adapter MUST specify a deterministic mapping from actual tool arguments to this complete context; an unchecked argument MUST NOT change the dispatched action.</t>
+        <t>The gateway MUST compare a freshly computed context digest to the token before dispatch and execute the already validated arguments without further agent modification. A changed merchant, recipient, amount, currency, tool, call, session handle, or nonce requires a new result. The profile binds request integrity; independent payment authority is still required.</t>
+      </section>
+      <section anchor="runtime-ert">
+        <name>Runtime ERT Claims and Header</name>
+        <t>A runtime ERT uses compact JWS with Ed25519 and protected header alg EdDSA, typ mia-runtime-ert+jwt, and a nonempty kid. This typ value is a profile-specific discriminator, not a claim of IANA registration. The verifier MUST enforce all three fields and independently authorize the issuer/key pair. The profile defines no unprotected headers and permits no critical or remote-key-selection headers.</t>
+        <t>All legacy required ERT claims remain required. Additionally the following claims are REQUIRED:</t>
+        <dl>
+          <dt>mia_profile:</dt>
+          <dd>The MIA-RT1 identifier.</dd>
+          <dt>aud:</dt>
+          <dd>One string identifying the intended enforcing gateway or service; it MUST exactly match the receiver's configured audience.</dd>
+          <dt>nonce:</dt>
+          <dd>The request_nonce from the independently retained request context.</dd>
+          <dt>mia_digest:</dt>
+          <dd>The digest of the complete MIA checked, or null if no canonicalizable MIA was obtained. A pass result MUST contain a digest.</dd>
+          <dt>criteria_id and criteria_digest:</dt>
+          <dd>The approved criteria identifier and complete criteria digest.</dd>
+          <dt>request_digest:</dt>
+          <dd>The complete gateway request-context digest.</dd>
+          <dt>checks:</dt>
+          <dd>The object containing all seven named check outcomes.</dd>
+          <dt>result:</dt>
+          <dd>pass, fail, or indeterminate, calculated from the required checks.</dd>
+          <dt>reason_codes:</dt>
+          <dd>An array of machine-readable reasons. The base vocabulary is invalid_assertion, domain_mismatch, unauthorized_issuer, untrusted_issuer, evidence_unavailable, evidence_mismatch, revoked, stale_evidence, recipient_mismatch, and verification_error. Extensions use reverse-domain names. Unknown reasons do not change the result.</dd>
+          <dt>evidence_checked_at:</dt>
+          <dd>Unix seconds for the earliest relied-upon check, or null if no usable evidence was obtained. A pass result MUST have an integer.</dd>
+        </dl>
+        <t>mia_verified retains its core meaning of assertion validity. It MUST NOT be used alone as policy approval. It may be true when issuer_trust, identity_evidence, or payment_recipient_binding fails. A pass result MUST have mia_verified true and the associated mia_subject, mia_issued_at, and mia_issuer_domain claims. The runtime verifier MUST cross-check these against the retained MIA and require its digest to match.</t>
+        <t>iat and exp are integer Unix timestamps with 0 &lt; exp - iat &lt;= 300. A successful token's expiry MUST NOT exceed any relied-upon MIA, delegation, identity-evidence, recipient-evidence, or status validity deadline. The gateway MUST reject expired MIA or evidence even if the token itself has not expired. Replay and time rules in <xref target="replay-attacks"/> apply.</t>
+      </section>
+      <section anchor="runtime-gate">
+        <name>Gateway Policy Contract</name>
+        <t>An adapter MUST verify the signature, issuer authority, audience, type, profile, challenge, canonical digests, assertion consistency, required checks, evidence recency, and all expiry limits before supplying merchant-verification attributes to its policy engine. These attributes MUST be populated by trusted code and MUST NOT be accepted from the agent as an authoritative assertion. The adapter MUST distinguish invalid evidence, an authentic negative result, and an indeterminate result.</t>
+        <t>For actions requiring merchant verification, policy MUST permit execution only when the independently validated profile result is pass and all separate action-authority requirements are satisfied. Missing or unsupported profiles, unavailable required evidence, mismatched context, and replay MUST prevent dispatch. Operational errors may trigger a new verification attempt or an external human approval process, but MUST NOT silently convert to permit. A human override, if separately supported, MUST be attributable and recorded as an override rather than as a successful MIA check.</t>
+        <t>Payment credentials and routes MUST be confined so that the agent cannot bypass the enforcing adapter and invoke the same action directly. Enforcement claims cover only actions that traverse that boundary. Replay consumption, idempotency, and dispatch coordination MUST withstand concurrent requests and crashes; an in-memory example does not satisfy a distributed production deployment.</t>
+      </section>
+      <section anchor="runtime-appraisal">
+        <name>Merchant Verification Appraisal</name>
+        <t>A service MAY issue a companion MerchantVerificationAppraisal-v1 JSON object. It is a separately signed statement that can be retained and referenced by execution evidence. It does not replace the ERT or authorize execution. Its REQUIRED fields are:</t>
+        <dl>
+          <dt>version and type:</dt>
+          <dd>Integer 1 and the string MerchantVerificationAppraisal-v1.</dd>
+          <dt>id:</dt>
+          <dd>A globally unique statement identifier.</dd>
+          <dt>condition:</dt>
+          <dd>An object with id and digest for the criteria actually applied.</dd>
+          <dt>subject:</dt>
+          <dd>An object with id identifying the merchant assertion and digest covering the complete checked MIA. The subject here is the checked document, not the agent or gateway.</dd>
+          <dt>issuer and issuer_key_id:</dt>
+          <dd>The checker identity and a key identifier resolved through an independently trusted issuer/key association.</dd>
+          <dt>signature_algorithm:</dt>
+          <dd>The string Ed25519; included in the signed data.</dd>
+          <dt>issued_at:</dt>
+          <dd>Integer Unix time when the checker signed this statement.</dd>
+          <dt>outcome_vocabulary:</dt>
+          <dd>The MIA-RT1 profile identifier followed by #outcomes.</dd>
+          <dt>outcome and checks:</dt>
+          <dd>The same result and check values as the associated ERT.</dd>
+          <dt>request_digest and ert_digest:</dt>
+          <dd>The request digest and exact compact-token digest.</dd>
+          <dt>signature:</dt>
+          <dd>Unpadded base64url Ed25519 signature over JCS of this object with only signature omitted.</dd>
+        </dl>
+        <t>The retained object MUST be immutable. Its content digest covers the complete canonical object including signature. Verifiers MUST independently authenticate the checker key and match condition, subject, token, and request digests. When no canonicalizable MIA exists, this appraisal form MUST NOT invent a subject digest; retain the negative ERT instead.</t>
+        <t>An appraisal reports the checker's finding. Referencing it from a hardware-attested record does not make its external business evidence hardware-attested. Later audit MAY inspect an expired token as historical evidence, but a trustworthy historical conclusion additionally depends on retained keys, source evidence, criteria, timing, and revocation information. A timestamp written by an issuer is not an independent timestamp authority.</t>
+      </section>
+      <section anchor="runtime-privacy">
+        <name>Profile Privacy and Retention</name>
+        <t>Public MIAs MUST NOT acquire agent, customer, bank-account, or session identifiers through this profile. ERTs and appraisals MUST NOT contain consumer or agent-principal identifiers. Keep the authenticated-agent-to-session association in access-controlled runtime records. Opaque session handles and request digests can still be linkable personal or commercial data and MUST NOT be represented as anonymization.</t>
+        <t>Request context, payment destinations, and evidence bundles MUST be retained only with appropriate authorization and access controls. Public transparency publication, if used, SHOULD contain only the minimal commitments appropriate to that deployment and MUST NOT disclose protected transaction data without authorization. Retention periods and resolver obligations MUST be documented. A missing historical object does not retroactively invalidate a separately valid execution-record signature.</t>
+      </section>
+      <section anchor="runtime-conformance">
+        <name>Conformance and Versioning</name>
+        <t>A claim MUST state whether it covers core MIA issuance/verification, MIA-RT1 result issuance, MIA-RT1 enforcement, or appraisal production/verification. A schema check alone does not establish semantic, security, or network conformance. Implementations MUST identify the draft revision and schema digests used; mappings to external runtimes MUST also identify exact specification revisions and package releases or commit identifiers.</t>
+        <t>Implementers MUST publish reproducible examples covering valid verification, an altered signature, an untrusted verifier key, a substituted merchant, wrong audience, changed recipient or amount, stale evidence, revoked assertion, missing required evidence, token replay, an altered appraisal, and an unresolved audit reference. An unresolved reference may leave an audit incomplete; it MUST NOT rewrite the validity of an otherwise valid external record.</t>
+        <t>All example merchants and keys MUST be explicitly identified as test fixtures. A deterministic demonstration key MUST never be used in production. Profile-specific fields MUST NOT be advertised as existing upstream fields without a tested adapter. The repository accompanying this author revision provides illustrative offline checks, not certification or a production payment gateway.</t>
+      </section>
+    </section>
+    <section anchor="agentrust-mapping">
+      <name>Informative Mapping to AgenTrust</name>
+      <t>This mapping is a proposal based on public documentation reviewed on 28 September 2026. It is not an upstream feature announcement. Agent Manifest v0.2, cMCP policy/session documentation, TRACE v0.2, and its reference registry may evolve independently. Integration reports must pin exact source revisions rather than rely on an unversioned website.</t>
+      <section anchor="map-manifest">
+        <name>Agent and Merchant Identities</name>
+        <t>Keep MIA subject as the merchant domain. Agent Manifest agent_id and manifest_id identify the agent and its configuration. In the documented cMCP envelope, gateway.agent_identity associates that agent with the session, while trace.subject identifies the issuing gateway workload. The MIA adapter consumes this authenticated runtime association; it MUST NOT overwrite those identities with a merchant domain or infer authenticated agency from a merchant receipt.</t>
+        <t>The approved tool catalog can include the merchant-verification tool and payment tool. Policy and catalog hashes bind their approved definitions in the manifest. A tool's mere presence does not enforce its invocation before payment.</t>
+      </section>
+      <section anchor="map-policy">
+        <name>Pre-Call Policy Adapter</name>
+        <t>cMCP evaluates policy before forwarding a routed tool call <xref target="CMCP-POLICY"/>. An integration must supply trusted merchant-verification facts to that decision after validating MIA-RT1. Names such as merchant_identity_verified or payment_context_matched are proposed adapter attributes, not documented built-in cMCP attributes. The adapter must update the runtime context construction, policy schema, and tests together, and bind the deployed policy version. A current cMCP package must be tested to determine the supported extension mechanism.</t>
+      </section>
+      <section anchor="map-trace">
+        <name>TRACE Reference Mapping</name>
+        <t>A conforming companion appraisal can be linked through a TRACE references entry with rel condition-appraisal, id identifying the retained appraisal, resolver identifying its retention operator, and digest covering the complete signed appraisal. An optional retention value states a retention undertaking. The appraisal's condition identifies the criteria and its subject identifies the checked MIA <xref target="TRACE-REFERENCES"/>.</t>
+        <t>The reference is an assurance-neutral pointer. It does not authorize an action, establish successful checking, or upgrade an external assertion into hardware evidence. TRACE validity must not depend on whether that pointer resolves. A commerce policy may separately deny a payment when required merchant evidence is missing without declaring the TRACE record invalid. Preserve this separation in the adapter and user-visible results.</t>
+        <t>The existing JWT ERT cannot simply be renamed as a condition-appraisal object. This document's companion JSON appraisal supplies the separately signed object and complete-object digest described by that registry. Embedding the ERT digest links the two statements without changing JWS signing semantics.</t>
+      </section>
+      <section anchor="map-hardware">
+        <name>Evidence Limits</name>
+        <t>A software-only deployment may produce signed merchant results and references. Hardware provenance requires independent evidence binding the executing runtime, its measurements, and its signing key under the external platform's rules. A merchant issuer or checker MUST NOT claim hardware assurance merely because another system later references its statement. No field in this profile represents IETF or AgenTrust approval.</t>
+      </section>
+    </section>
+    <section anchor="privacy-considerations">
+      <name>Privacy Considerations</name>
+      <section anchor="minimal-disclosure">
+        <name>Minimal Disclosure</name>
+        <t>MIA documents MUST NOT include personal data about
+        natural persons except where the subject is a sole
+        proprietor, such disclosure is legally required in
+        the jurisdiction, and the natural person has provided
+        explicit consent.</t>
+      </section>
+      <section anchor="evidence-uri-privacy">
+        <name>Evidence URI Privacy</name>
+        <t>The evidenceUris field, if included, reveals which
+        third-party registries were used to corroborate the
+        merchant's identity. Issuers SHOULD assess the
+        privacy implications of each URI before inclusion.</t>
+      </section>
+      <section anchor="relying-party-query-privacy">
+        <name>Relying Party Query Privacy</name>
+        <t>Real-time retrieval of MIAs from well-known URIs or
+        Key Directories reveals which merchants a relying
+        party intends to transact with. Implementations
+        SHOULD use caching and pre-fetching strategies to
+        reduce this correlation risk.</t>
+      </section>
+      <section anchor="issuer-correlation-privacy">
+        <name>Issuer-Side Correlation</name>
+        <t>An issuer hosting MIAs at well-known URIs, and the
+        operator of any Key Directory, observes which network
+        endpoints retrieve which assertions. Operators of
+        verification-as-a-service offerings, third-party
+        issuers, and CDNs in the retrieval path can therefore
+        construct correlation graphs linking relying parties
+        to merchant-domain queries. Issuers and intermediaries
+        SHOULD NOT log or retain the source IP, principal
+        identifier, or session identifier of MIA retrievals
+        beyond what is operationally necessary, and MUST NOT
+        share such retrieval metadata with third parties
+        without the requesting relying party's consent.
+        Operators of verification services that issue ERTs on
+        behalf of relying parties MUST ensure that retrieval
+        logs are not cross-linked with ERT issuance records in
+        ways that would defeat the consumer principal privacy
+        requirements in
+        <xref target="consumer-principal-privacy"/>.</t>
+      </section>
+      <section anchor="consumer-principal-privacy">
+        <name>Consumer Principal Privacy</name>
+        <t>ERTs as defined in <xref target="ert"/> MUST NOT include
+        consumer or agent principal identifiers. Verification
+        services MUST NOT log consumer identifiers in
+        association with merchant verification events without
+        explicit consumer consent.</t>
+      </section>
+    </section>
+    <section anchor="security-considerations">
+      <name>Security Considerations</name>
+      <section anchor="replay-attacks">
+        <name>Replay and Idempotency</name>
+        <t>Live acceptance of an ERT and historical inspection of an ERT are distinct operations. A verifier MAY inspect a retained receipt repeatedly for audit purposes, but MUST NOT treat an expired receipt as live authority.</t>
+        <t>Where an ERT gates an action, the enforcing service MUST scope replay state by issuer, audience when present, and jti. Successful consumption MUST be atomic and MUST occur before the action is dispatched. Keep the consumed identifier until at least exp plus the configured maximum clock-skew allowance. Invalid tokens MUST NOT consume unrelated identifiers. A repeated request MAY return the stored outcome of the original action, but MUST NOT dispatch a second action.</t>
+        <t>The runtime profile requires an audience, challenge, and exact request binding. Legacy ERTs lacking those bindings MUST NOT be accepted as runtime-profile receipts. iat MAY be up to 30 seconds ahead of the receiver clock; expiration MUST NOT be extended by clock skew. The receiver MUST reject now &gt;= exp, exp &lt;= iat, and a lifetime greater than 300 seconds.</t>
+      </section>
+      <section anchor="key-compromise">
+        <name>Key Compromise</name>
+        <t>If an issuer's signing key is compromised, all MIA
+        documents signed with that key MUST be treated as
+        invalid. Issuers MUST maintain key rotation
+        procedures and MUST remove compromised keys from
+        their Key Directory promptly. Relying parties that
+        cache Key Directory material MUST re-fetch on
+        signature verification failure.</t>
+      </section>
+      <section anchor="domain-transfer">
+        <name>Domain Transfer</name>
+        <t>An MIA is bound to a domain name. Transfer of that
+        domain to a new owner does not automatically
+        invalidate outstanding assertions. Issuers MUST
+        implement procedures to detect domain transfer
+        and revoke or re-evaluate affected assertions
+        without delay.</t>
+      </section>
+      <section anchor="malicious-issuers">
+        <name>Malicious Issuers</name>
+        <t>A third-party issuer operating in bad faith may
+        publish false assertions. Relying parties SHOULD
+        NOT treat all issuers as equally trustworthy. Relying
+        parties MAY maintain allowlists of trusted issuer
+        domains and SHOULD treat assertions from unknown
+        issuers with heightened scrutiny. The third-party
+        authorization requirement in <xref target="third-party-auth"/> ensures
+        that an issuer cannot publish an MIA for a domain
+        that has not explicitly authorized it, but does not
+        guarantee the issuer itself is trustworthy.</t>
+      </section>
+      <section anchor="stale-assertions">
+        <name>Stale Assertions</name>
+        <t>Merchant legal standing may change after assertion
+        issuance (e.g., insolvency, license revocation,
+        sanctions designation). Relying parties in regulated
+        industries MUST NOT treat an MIA as sole evidence of
+        current compliance and SHOULD supplement MIA
+        verification with jurisdiction-appropriate checks for
+        high-value or high-risk transactions.</t>
+      </section>
+      <section anchor="downgrade-attacks">
+        <name>Downgrade Attacks</name>
+        <t>An attacker with network access could substitute an
+        older but still-valid MIA for a more recently issued
+        one. Relying parties SHOULD record the issuedAt
+        timestamp of the assertion used in a transaction and
+        SHOULD reject assertions whose issuedAt predates
+        their recency threshold for the transaction context.</t>
+      </section>
+      <section anchor="third-party-auth-poisoning">
+        <name>Third-Party Authorization Poisoning</name>
+        <t>DNS TXT records (<xref target="third-party-auth"/>, mechanism a) are
+        susceptible to cache poisoning if DNSSEC is not
+        deployed. Implementations MUST use DNSSEC-validated
+        resolution where available when performing DNS-based
+        third-party authorization checks. HTTP delegation
+        documents (mechanism b) MUST be retrieved over HTTPS
+        with certificate validation; relying parties MUST
+        reject delegation documents served without a valid
+        TLS certificate.</t>
+      </section>
+      <section anchor="jwt-security">
+        <name>JWT Security</name>
+        <t>Implementations of the ERT (<xref target="ert"/>) MUST comply
+        with JWT Best Current Practices <xref target="RFC8725"/>, including:</t>
+        <ul>
+          <li>Explicitly validating the alg header value.</li>
+          <li>Rejecting tokens with alg: "none".</li>
+          <li>Validating iss, sub, iat, exp, and jti before acting on any token.</li>
+          <li>Not relying on unverified header parameters for security decisions.</li>
+        </ul>
+      </section>
+      <section anchor="crypto-agility">
+        <name>Cryptographic Agility and Post-Quantum Considerations</name>
+        <t>The MIA proof envelope (<xref target="proof-object"/>)
+        carries an explicit alg field to enable cryptographic
+        agility. This document defines a single algorithm,
+        Ed25519 <xref target="RFC8032"/>, as mandatory to
+        implement. Future specifications MAY register additional
+        algorithm identifiers via Standards Action, including
+        post-quantum signature algorithms standardized by NIST
+        such as ML-DSA <xref target="FIPS204"/>, and composite
+        signature schemes that combine a classical and a
+        post-quantum algorithm in a single proof.</t>
+        <t>MIA is signed public data. Its relevant post-quantum risk is signature forgery, rather than later decryption of a confidential payload. Short validity and key rotation reduce ordinary exposure but do not make Ed25519 quantum-resistant. A future algorithm profile must specify its wire identifier, key parameters, verification rules, and downgrade protection before it can be claimed interoperable.</t>
+        <t>Implementations consuming MIAs SHOULD be designed to
+        accommodate additional algorithm identifiers in the
+        proof.alg field without requiring changes to the
+        envelope format or wire structure. Specifications
+        introducing new algorithms MUST define the corresponding
+        JWK parameters in the Key Directory
+        (<xref target="key-directory"/>) and SHOULD address
+        coexistence with deployed Ed25519 keys.</t>
+      </section>
+      <section anchor="fetch-safety">
+        <name>Network Retrieval and Trust Boundaries</name>
+        <t>MIA, key, delegation, evidence, and status locations are untrusted inputs until validated. Verifiers MUST enforce destination and egress policy on every fetch and DNS resolution, including redirects where separately permitted for evidence resources. They MUST prevent requests to loopback, link-local, private, cloud-metadata, or otherwise prohibited addresses unless an administrator has explicitly configured that private deployment. Enforce response-size, timeout, redirect, recursion, and decompression limits. Revalidate the resolved destination at connection time to resist DNS rebinding. Key and delegation retrieval MUST NOT follow cross-origin redirects.</t>
+        <t>For high-assurance third-party authorization, use a valid signed MIDD retrieved from the expected merchant origin or a DNSSEC-validated authorization record. An insecure or bogus DNS result MUST NOT satisfy that profile. Domain authorization proves control over publication; legal-entity assurance still requires independent evidence.</t>
+      </section>
+      <section anchor="proof-domain-separation">
+        <name>Object Types and Future Signature Profiles</name>
+        <t>MIA and MIDD verifiers MUST enforce their own complete schemas and MUST NOT accept one object type as another merely because a signature verifies. Implementations SHOULD use separate signing keys by purpose. The version 1 signature preimage remains unchanged; future algorithms or envelopes MUST bind the algorithm and object purpose and define downgrade-resistant migration. This revision does not make Ed25519 resistant to a cryptographically relevant quantum computer.</t>
+      </section>
+    </section>
+    <section anchor="iana-considerations">
+      <name>IANA Considerations</name>
+      <section anchor="well-known-merchant-identity">
+        <name>Well-Known URI: merchant-identity.json</name>
+        <t>This document requests registration in the "Well-Known
+        URIs" registry <xref target="RFC8615"/>:</t>
+        <dl>
+          <dt>URI suffix:</dt>
+          <dd>merchant-identity.json</dd>
+          <dt>Change controller:</dt>
+          <dd>IETF</dd>
+          <dt>Specification document(s):</dt>
+          <dd>This document, <xref target="well-known-uri"/>
+          </dd>
+          <dt>Status:</dt>
+          <dd>permanent</dd>
+          <dt>Related information:</dt>
+          <dd>None</dd>
+        </dl>
+      </section>
+      <section anchor="well-known-mia-delegation">
+        <name>Well-Known URI: mia-delegation.json</name>
+        <t>This document requests registration in the "Well-Known
+        URIs" registry <xref target="RFC8615"/>:</t>
+        <dl>
+          <dt>URI suffix:</dt>
+          <dd>mia-delegation.json</dd>
+          <dt>Change controller:</dt>
+          <dd>IETF</dd>
+          <dt>Specification document(s):</dt>
+          <dd>This document, <xref target="third-party-auth"/>
+          </dd>
+          <dt>Status:</dt>
+          <dd>permanent</dd>
+          <dt>Related information:</dt>
+          <dd>Used to publish a Merchant Identity Delegation Document (MIDD) authorizing a named third-party issuer to publish MIAs on behalf of the subject domain.</dd>
+        </dl>
+      </section>
+      <section anchor="media-type">
+        <name>Media Type: application/merchant-identity+json</name>
+        <t>This document requests registration of a new media
+        type per <xref target="RFC6838"/>:</t>
+        <dl>
+          <dt>Type name:</dt>
+          <dd>application</dd>
+          <dt>Subtype name:</dt>
+          <dd>merchant-identity+json</dd>
+          <dt>Required parameters:</dt>
+          <dd>none</dd>
+          <dt>Optional parameters:</dt>
+          <dd>version: The MIA version number (integer). Defaults to 1 if absent.</dd>
+          <dt>Encoding considerations:</dt>
+          <dd>Binary (UTF-8 encoded JSON per <xref target="RFC8259"/>).</dd>
+          <dt>Security considerations:</dt>
+          <dd>See <xref target="security-considerations"/> of this document.</dd>
+          <dt>Interoperability considerations:</dt>
+          <dd>See <xref target="design-goals"/> of this document.</dd>
+          <dt>Published specification:</dt>
+          <dd>This document.</dd>
+          <dt>Applications that use this media type:</dt>
+          <dd>Autonomous agents performing pre-transaction merchant identity verification; verification services issuing Evaluation Result Tokens; merchant identity registries.</dd>
+          <dt>Fragment identifier considerations:</dt>
+          <dd>None.</dd>
+          <dt>Additional information:</dt>
+          <dd>Deprecated alias names for this type: None. Magic number(s): None. File extension(s): .mia.json. Macintosh file type code(s): None.</dd>
+          <dt>Person &amp; email address to contact for further information:</dt>
+          <dd>founder@registeredbrands.ai</dd>
+          <dt>Intended usage:</dt>
+          <dd>COMMON</dd>
+          <dt>Restrictions on usage:</dt>
+          <dd>None.</dd>
+          <dt>Author:</dt>
+          <dd>Robb Anders</dd>
+          <dt>Change controller:</dt>
+          <dd>IETF</dd>
+        </dl>
+      </section>
+      <section anchor="media-type-midd">
+        <name>Media Type: application/merchant-delegation+json</name>
+        <t>This document requests registration of a new media
+        type per <xref target="RFC6838"/>:</t>
+        <dl>
+          <dt>Type name:</dt>
+          <dd>application</dd>
+          <dt>Subtype name:</dt>
+          <dd>merchant-delegation+json</dd>
+          <dt>Required parameters:</dt>
+          <dd>none</dd>
+          <dt>Optional parameters:</dt>
+          <dd>version: The MIDD version number (integer). Defaults to 1 if absent.</dd>
+          <dt>Encoding considerations:</dt>
+          <dd>Binary (UTF-8 encoded JSON per <xref target="RFC8259"/>).</dd>
+          <dt>Security considerations:</dt>
+          <dd>See <xref target="security-considerations"/> of this document. The MIDD MUST be signed by a key published at the subject domain's Key Directory; see <xref target="third-party-auth"/>.</dd>
+          <dt>Interoperability considerations:</dt>
+          <dd>See <xref target="design-goals"/> of this document.</dd>
+          <dt>Published specification:</dt>
+          <dd>This document, <xref target="third-party-auth"/>.</dd>
+          <dt>Applications that use this media type:</dt>
+          <dd>Merchant Identity Assertion (MIA) issuers and verifiers; relying parties evaluating third-party-issued MIAs.</dd>
+          <dt>Fragment identifier considerations:</dt>
+          <dd>None.</dd>
+          <dt>Additional information:</dt>
+          <dd>Deprecated alias names for this type: None. Magic number(s): None. File extension(s): .midd.json. Macintosh file type code(s): None.</dd>
+          <dt>Person &amp; email address to contact for further information:</dt>
+          <dd>founder@registeredbrands.ai</dd>
+          <dt>Intended usage:</dt>
+          <dd>COMMON</dd>
+          <dt>Restrictions on usage:</dt>
+          <dd>None.</dd>
+          <dt>Author:</dt>
+          <dd>Robb Anders</dd>
+          <dt>Change controller:</dt>
+          <dd>IETF</dd>
+        </dl>
+      </section>
+    </section>
+  </middle>
+  <back>
+    <references>
+      <name>References</name>
+      <references>
+        <name>Normative References</name>
+        <reference anchor="RFC2119" target="https://www.rfc-editor.org/rfc/rfc2119">
+          <front>
+            <title>Key words for use in RFCs to Indicate Requirement Levels</title>
+            <author fullname="S. Bradner" initials="S." surname="Bradner"/>
+            <date year="1997" month="March"/>
+          </front>
+          <seriesInfo name="BCP" value="14"/>
+          <seriesInfo name="RFC" value="2119"/>
+          <seriesInfo name="DOI" value="10.17487/RFC2119"/>
+        </reference>
+        <reference anchor="RFC7515" target="https://www.rfc-editor.org/rfc/rfc7515">
+          <front>
+            <title>JSON Web Signature (JWS)</title>
+            <author fullname="M. Jones" initials="M." surname="Jones"/>
+            <author fullname="J. Bradley" initials="J." surname="Bradley"/>
+            <author fullname="N. Sakimura" initials="N." surname="Sakimura"/>
+            <date year="2015" month="May"/>
+          </front>
+          <seriesInfo name="RFC" value="7515"/>
+          <seriesInfo name="DOI" value="10.17487/RFC7515"/>
+        </reference>
+        <reference anchor="RFC7517" target="https://www.rfc-editor.org/rfc/rfc7517">
+          <front>
+            <title>JSON Web Key (JWK)</title>
+            <author fullname="M. Jones" initials="M." surname="Jones"/>
+            <date year="2015" month="May"/>
+          </front>
+          <seriesInfo name="RFC" value="7517"/>
+          <seriesInfo name="DOI" value="10.17487/RFC7517"/>
+        </reference>
+        <reference anchor="RFC7519" target="https://www.rfc-editor.org/rfc/rfc7519">
+          <front>
+            <title>JSON Web Token (JWT)</title>
+            <author fullname="M. Jones" initials="M." surname="Jones"/>
+            <author fullname="J. Bradley" initials="J." surname="Bradley"/>
+            <author fullname="N. Sakimura" initials="N." surname="Sakimura"/>
+            <date year="2015" month="May"/>
+          </front>
+          <seriesInfo name="RFC" value="7519"/>
+          <seriesInfo name="DOI" value="10.17487/RFC7519"/>
+        </reference>
+        <reference anchor="RFC8032" target="https://www.rfc-editor.org/rfc/rfc8032">
+          <front>
+            <title>Edwards-Curve Digital Signature Algorithm (EdDSA)</title>
+            <author fullname="S. Josefsson" initials="S." surname="Josefsson"/>
+            <author fullname="I. Liusvaara" initials="I." surname="Liusvaara"/>
+            <date year="2017" month="January"/>
+          </front>
+          <seriesInfo name="RFC" value="8032"/>
+          <seriesInfo name="DOI" value="10.17487/RFC8032"/>
+        </reference>
+        <reference anchor="RFC8174" target="https://www.rfc-editor.org/rfc/rfc8174">
+          <front>
+            <title>Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words</title>
+            <author fullname="B. Leiba" initials="B." surname="Leiba"/>
+            <date year="2017" month="May"/>
+          </front>
+          <seriesInfo name="BCP" value="14"/>
+          <seriesInfo name="RFC" value="8174"/>
+          <seriesInfo name="DOI" value="10.17487/RFC8174"/>
+        </reference>
+        <reference anchor="RFC5890" target="https://www.rfc-editor.org/rfc/rfc5890">
+          <front>
+            <title>Internationalized Domain Names for Applications (IDNA): Definitions and Document Framework</title>
+            <author fullname="J. Klensin" initials="J." surname="Klensin"/>
+            <date year="2010" month="August"/>
+          </front>
+          <seriesInfo name="RFC" value="5890"/>
+          <seriesInfo name="DOI" value="10.17487/RFC5890"/>
+        </reference>
+        <reference anchor="RFC8259" target="https://www.rfc-editor.org/rfc/rfc8259">
+          <front>
+            <title>The JavaScript Object Notation (JSON) Data Interchange Format</title>
+            <author fullname="T. Bray" initials="T." surname="Bray" role="editor"/>
+            <date year="2017" month="December"/>
+          </front>
+          <seriesInfo name="STD" value="90"/>
+          <seriesInfo name="RFC" value="8259"/>
+          <seriesInfo name="DOI" value="10.17487/RFC8259"/>
+        </reference>
+        <reference anchor="RFC8615" target="https://www.rfc-editor.org/rfc/rfc8615">
+          <front>
+            <title>Well-Known Uniform Resource Identifiers (URIs)</title>
+            <author fullname="M. Nottingham" initials="M." surname="Nottingham"/>
+            <date year="2019" month="May"/>
+          </front>
+          <seriesInfo name="RFC" value="8615"/>
+          <seriesInfo name="DOI" value="10.17487/RFC8615"/>
+        </reference>
+        <reference anchor="RFC8725" target="https://www.rfc-editor.org/rfc/rfc8725">
+          <front>
+            <title>JSON Web Token Best Current Practices</title>
+            <author fullname="Y. Sheffer" initials="Y." surname="Sheffer"/>
+            <author fullname="D. Hardt" initials="D." surname="Hardt"/>
+            <author fullname="M. Jones" initials="M." surname="Jones"/>
+            <date year="2020" month="February"/>
+          </front>
+          <seriesInfo name="BCP" value="225"/>
+          <seriesInfo name="RFC" value="8725"/>
+          <seriesInfo name="DOI" value="10.17487/RFC8725"/>
+        </reference>
+        <reference anchor="RFC8785" target="https://www.rfc-editor.org/rfc/rfc8785">
+          <front>
+            <title>JSON Canonicalization Scheme (JCS)</title>
+            <author fullname="A. Rundgren" initials="A." surname="Rundgren"/>
+            <author fullname="B. Jordan" initials="B." surname="Jordan"/>
+            <author fullname="S. Erdtman" initials="S." surname="Erdtman"/>
+            <date year="2020" month="June"/>
+          </front>
+          <seriesInfo name="RFC" value="8785"/>
+          <seriesInfo name="DOI" value="10.17487/RFC8785"/>
+        </reference>
+        <reference anchor="RFC6838" target="https://www.rfc-editor.org/rfc/rfc6838">
+          <front>
+            <title>Media Type Specifications and Registration Procedures</title>
+            <author fullname="N. Freed" initials="N." surname="Freed"/>
+            <author fullname="J. Klensin" initials="J." surname="Klensin"/>
+            <author fullname="T. Hansen" initials="T." surname="Hansen"/>
+            <date year="2013" month="January"/>
+          </front>
+          <seriesInfo name="BCP" value="13"/>
+          <seriesInfo name="RFC" value="6838"/>
+          <seriesInfo name="DOI" value="10.17487/RFC6838"/>
+        </reference>
+      </references>
+      <references>
+        <name>Informative References</name>
+        <reference anchor="RFC9421" target="https://www.rfc-editor.org/rfc/rfc9421">
+          <front>
+            <title>HTTP Message Signatures</title>
+            <author fullname="A. Backman" initials="A." surname="Backman" role="editor"/>
+            <author fullname="J. Richer" initials="J." surname="Richer" role="editor"/>
+            <author fullname="M. Sporny" initials="M." surname="Sporny"/>
+            <date year="2024" month="February"/>
+          </front>
+          <seriesInfo name="RFC" value="9421"/>
+          <seriesInfo name="DOI" value="10.17487/RFC9421"/>
+        </reference>
+        <reference anchor="WEBBOTAUTH" target="https://datatracker.ietf.org/doc/draft-meunier-web-bot-auth-architecture/">
+          <front>
+            <title>Web Bot Auth Architecture</title>
+            <author fullname="T. Meunier" initials="T." surname="Meunier"/>
+            <author fullname="S. Major" initials="S." surname="Major"/>
+            <date year="2026"/>
+          </front>
+          <seriesInfo name="Internet-Draft" value="draft-meunier-web-bot-auth-architecture"/>
+        </reference>
+        <reference anchor="KYAPAY" target="https://datatracker.ietf.org/doc/draft-skyfire-kyapayprofile-01/">
+          <front>
+            <title>KYAPay Profile</title>
+            <author>
+              <organization>IETF</organization>
+            </author>
+          </front>
+          <seriesInfo name="Internet-Draft" value="draft-skyfire-kyapayprofile-01"/>
+        </reference>
+        <reference anchor="RFC7591" target="https://www.rfc-editor.org/rfc/rfc7591">
+          <front>
+            <title>OAuth 2.0 Dynamic Client Registration Protocol</title>
+            <author fullname="J. Richer" initials="J." surname="Richer" role="editor"/>
+            <author fullname="M. Jones" initials="M." surname="Jones"/>
+            <author fullname="J. Bradley" initials="J." surname="Bradley"/>
+            <author fullname="M. Machulak" initials="M." surname="Machulak"/>
+            <author fullname="P. Hunt" initials="P." surname="Hunt"/>
+            <date year="2015" month="July"/>
+          </front>
+          <seriesInfo name="RFC" value="7591"/>
+          <seriesInfo name="DOI" value="10.17487/RFC7591"/>
+        </reference>
+        <reference anchor="RFC6698" target="https://www.rfc-editor.org/rfc/rfc6698">
+          <front>
+            <title>The DNS-Based Authentication of Named Entities (DANE) Transport Layer Security (TLS) Protocol: TLSA</title>
+            <author fullname="P. Hoffman" initials="P." surname="Hoffman"/>
+            <author fullname="J. Schlyter" initials="J." surname="Schlyter"/>
+            <date year="2012" month="August"/>
+          </front>
+          <seriesInfo name="RFC" value="6698"/>
+          <seriesInfo name="DOI" value="10.17487/RFC6698"/>
+        </reference>
+        <reference anchor="RFC9162" target="https://www.rfc-editor.org/rfc/rfc9162">
+          <front>
+            <title>Certificate Transparency Version 2.0</title>
+            <author fullname="B. Laurie" initials="B." surname="Laurie"/>
+            <author fullname="E. Messeri" initials="E." surname="Messeri"/>
+            <author fullname="R. Stradling" initials="R." surname="Stradling"/>
+            <date year="2021" month="December"/>
+          </front>
+          <seriesInfo name="RFC" value="9162"/>
+          <seriesInfo name="DOI" value="10.17487/RFC9162"/>
+        </reference>
+        <reference anchor="FIPS204" target="https://csrc.nist.gov/pubs/fips/204/final">
+          <front>
+            <title>Module-Lattice-Based Digital Signature Standard</title>
+            <author>
+              <organization>National Institute of Standards and Technology</organization>
+            </author>
+            <date year="2024" month="August"/>
+          </front>
+          <seriesInfo name="FIPS" value="204"/>
+        </reference>
+        <reference anchor="LEI" target="https://www.gleif.org/">
+          <front>
+            <title>Legal Entity Identifier</title>
+            <author>
+              <organization>Global Legal Entity Identifier Foundation</organization>
+            </author>
+            <date year="2026"/>
+          </front>
+        </reference>
+        <reference anchor="AGENT-MANIFEST" target="https://manifest.agentrust-io.com/spec/agent-manifest-v0.2/">
+          <front>
+            <title>Agent Manifest v0.2</title>
+            <author>
+              <organization>AgenTrust Contributors</organization>
+            </author>
+            <date year="2026" month="September"/>
+          </front>
+          <annotation>Evolving project specification; reviewed 28 September 2026. Informative mapping only.</annotation>
+        </reference>
+        <reference anchor="CMCP" target="https://cmcp.agentrust-io.com/">
+          <front>
+            <title>Confidential Model Context Protocol</title>
+            <author>
+              <organization>AgenTrust Contributors</organization>
+            </author>
+            <date year="2026" month="September"/>
+          </front>
+          <annotation>Evolving project specification; reviewed 28 September 2026. Informative mapping only.</annotation>
+        </reference>
+        <reference anchor="CMCP-POLICY" target="https://cmcp.agentrust-io.com/spec/cedar-policy/">
+          <front>
+            <title>cMCP Cedar Policy Specification</title>
+            <author>
+              <organization>AgenTrust Contributors</organization>
+            </author>
+            <date year="2026" month="September"/>
+          </front>
+          <annotation>Evolving project specification; reviewed 28 September 2026. Informative mapping only.</annotation>
+        </reference>
+        <reference anchor="TRACE" target="https://trace.agentrust-io.com/spec/trace-v0.2/">
+          <front>
+            <title>TRACE v0.2</title>
+            <author>
+              <organization>AgenTrust Contributors</organization>
+            </author>
+            <date year="2026" month="September"/>
+          </front>
+          <annotation>Evolving project specification; reviewed 28 September 2026. Informative mapping only.</annotation>
+        </reference>
+        <reference anchor="TRACE-REFERENCES" target="https://trace.agentrust-io.com/docs/references-registry/">
+          <front>
+            <title>TRACE References Relation Registry</title>
+            <author>
+              <organization>AgenTrust Contributors</organization>
+            </author>
+            <date year="2026" month="September"/>
+          </front>
+          <annotation>Evolving project specification; reviewed 28 September 2026. Informative mapping only.</annotation>
+        </reference>
+      </references>
+    </references>
+    <section anchor="acknowledgements" numbered="false">
+      <name>Acknowledgements</name>
+      <t>The author thanks the participants of the IETF
+      web-bot-auth working group for their engagement, and
+      in particular David Schinazi and Rifaat Shekh-Yusef
+      for their guidance in directing this work toward the
+      DISPATCH working group. The author also acknowledges
+      the complementary work in draft-skyfire-kyapayprofile,
+      which addresses agent-side identity in a manner that
+      this document's merchant-side framework is designed
+      to complement.</t>
+    </section>
+    <section anchor="document-history" numbered="false">
+      <name>Document History</name>
+      <t>This section is to be removed by the RFC Editor before
+      publication.</t>
+      <t>Changes from -01 to -02 (author revision, 28 September 2026):</t>
+      <ul>
+        <li>Added optional MIA-RT1 profile with criteria, granular outcomes, transaction-bound ERTs, replay and idempotency semantics, and a separately signed merchant-verification appraisal.</li>
+        <li>Added an informative mapping to Agent Manifest, cMCP, and TRACE, preserving their distinct identities and assurance boundaries.</li>
+        <li>Clarified independent issuer trust, strict proof consistency, full JCS processing, fetch safety, timestamp boundaries, key caching, and revocation behavior.</li>
+        <li>Preserved core MIA version 1 and legacy ERT availability. Strict runtime claims apply only to explicitly selected MIA-RT1 deployments.</li>
+        <li>Fixed proof.alg construction, RFCXML section-name elements, the ERT example timestamps, and overly broad novelty and post-quantum claims.</li>
+        <li>Added schemas and offline example validation in the accompanying open-source repository; no production gateway or upstream interoperability certification is claimed.</li>
+      </ul>
+      <t>Changes from -00 to -01 (author revision):</t>
+      <ul>
+        <li>Added Motivating Scenario in
+        <xref target="problem-statement"/>.</li>
+        <li>Added dedicated Non-Goals section
+        (<xref target="non-goals"/>) explicitly excluding trust
+        scoring, ranking, endorsement, payment authorization,
+        agent identity, identity of natural persons, and
+        central registries.</li>
+        <li>Added Relationship to Existing Work section
+        (<xref target="relationship-existing-work"/>) covering
+        X.509/Web PKI, W3C VC/DID, OAuth Dynamic Client
+        Registration, SPIFFE, and DNS-based identity.</li>
+        <li>Added Issuance Models and Assurance Considerations
+        section (<xref target="issuance-models"/>) describing
+        self-issuance, third-party issuance, external evidence,
+        and relying party policy.</li>
+        <li>Refactored proof envelope: separated proof.type
+        (envelope format identifier) from proof.alg (signature
+        algorithm identifier); renamed proof type from
+        MerchantIdentityProof-EdDSA-v1 to
+        MerchantIdentityProof-v1.</li>
+        <li>Added Cryptographic Agility section
+        (<xref target="crypto-agility"/>) including
+        post-quantum considerations and ML-DSA reference.</li>
+        <li>Tightened Key Directory caching, rotation, and
+        unreachable-directory requirements
+        (<xref target="key-directory"/>).</li>
+        <li>Restructured Freshness and Revocation
+        (<xref target="freshness-and-revocation"/>) to
+        distinguish identity revocation, explicit revocation,
+        and operational revocation through key rotation.</li>
+        <li>Added Security Considerations subsections on Domain
+        Transfer, Stale Assertions, Downgrade Attacks, and
+        Third-Party Authorization Poisoning.</li>
+        <li>Requested registration of media type
+        application/merchant-delegation+json
+        (<xref target="media-type-midd"/>) and updated the
+        third-party authorization section to use it.</li>
+        <li>Added Versioning subsection
+        (<xref target="versioning"/>) clarifying the
+        independent version semantics of the Claims Object
+        and the proof envelope.</li>
+        <li>Added normative Domain Comparison rules
+        (<xref target="terminology"/>) covering IDNA2008
+        A-label normalization, trailing-dot handling, and
+        case-insensitive comparison; updated verification
+        steps to reference these rules.</li>
+        <li>Clarified the relationship between
+        proof.verificationMethod and issuer.keyDirectory:
+        only the authority component is compared, and the
+        path component MAY differ.</li>
+        <li>Added MIA endpoint cache-control guidance
+        (<xref target="rev-validity-period"/>).</li>
+        <li>Made the Key Directory dependency for MIDD-based
+        third-party authorization explicit
+        (<xref target="third-party-auth"/>); clarified that
+        DNS-only authorization does not require subject-domain
+        Key Directory.</li>
+        <li>Added clock-skew tolerance for ERT iat/exp
+        validation (<xref target="replay-attacks"/>).</li>
+        <li>Added evidenceUris failure-handling guidance
+        (<xref target="claim-fields-optional"/>): retrieval
+        failure does not invalidate the MIA absent
+        deployment-specific policy.</li>
+        <li>Added MIA fetch failure handling and redirect
+        prohibition in the verification procedure
+        (<xref target="verification-procedure"/>).</li>
+        <li>Added Issuer-Side Correlation privacy
+        consideration (<xref target="issuer-correlation-privacy"/>).</li>
+        <li>Added a paragraph clarifying the architectural
+        relationship between MIA and existing transport-layer
+        agent identity mechanisms (Web Bot Auth, HTTP Message
+        Signatures) in <xref target="introduction"/>.</li>
+        <li>Editorial improvements throughout.</li>
+      </ul>
+    </section>
+  </back>
+</rfc>
