@@ -1,0 +1,18 @@
+{
+  "id": "https://buyer.example/policies/merchant-identity/1",
+  "version": 1,
+  "accepted_mia_issuers": [
+    "issuer.example"
+  ],
+  "required_checks": [
+    "assertion_signature",
+    "merchant_domain",
+    "merchant_authorization",
+    "issuer_trust",
+    "identity_evidence",
+    "revocation",
+    "payment_recipient_binding"
+  ],
+  "maximum_evidence_age_seconds": 120,
+  "require_payment_recipient_binding": true
+}
