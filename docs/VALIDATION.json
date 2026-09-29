@@ -1,0 +1,10 @@
+{
+  "draft": "draft-anders-merchant-identity-assertions-02",
+  "validation_date": "2026-09-28",
+  "xml2rfc_version": "3.34.1",
+  "rendering": "RFCXML v3 text and HTML, no warnings",
+  "offline_tests_passed": 30,
+  "live_agentrust_integration_tested": false,
+  "production_payment_tested": false,
+  "draft_sha256": "b888f797bf3dc5df91ac1e0a693c5ccde4b45628c911497064b6a6148bff2e80"
+}
