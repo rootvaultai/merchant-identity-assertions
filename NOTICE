@@ -1,0 +1,14 @@
+Merchant Identity Assertions for Autonomous Commerce
+Copyright 2026 Robb Anders / RegisteredBrands.AI and contributors.
+
+Original repository material is offered under Apache License 2.0.
+See LICENSING.md for IETF and third-party notice boundaries.
+
+The original -01 RFCXML was supplied by the author. The -02 author revision
+retains the IETF Trust declaration and generated legal notices.
+
+Agent Manifest, cMCP, TRACE, AgenTrust, IETF and other referenced project names
+identify external work. Their mention implies no endorsement or affiliation.
+
+All merchants, signing keys, evidence checks and payment requests in examples/
+are synthetic demonstration data. Example private keys are publicly derivable.
