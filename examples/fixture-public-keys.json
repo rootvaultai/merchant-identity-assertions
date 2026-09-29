@@ -1,0 +1,23 @@
+{
+  "merchant.example": {
+    "kty": "OKP",
+    "crv": "Ed25519",
+    "use": "sig",
+    "kid": "fixture-merchant-1",
+    "x": "GPCdyrnrhAOx4zWSGwenCPReFZI11Vm-D1fHrFL5ZpA"
+  },
+  "issuer.example": {
+    "kty": "OKP",
+    "crv": "Ed25519",
+    "use": "sig",
+    "kid": "fixture-issuer-1",
+    "x": "xdmzrX9BPoinAz9cJrG0lZt1Oa8J3bsYB5u4qCS-SoY"
+  },
+  "verifier.example": {
+    "kty": "OKP",
+    "crv": "Ed25519",
+    "use": "sig",
+    "kid": "fixture-verifier-1",
+    "x": "A5cDauKpPnovAms7QwV7u-VyqJs4SnrXlNV-hsyaFPE"
+  }
+}

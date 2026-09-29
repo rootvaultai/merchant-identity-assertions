@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "profile": "https://registeredbrands.ai/profiles/mia-runtime/v1",
+  "merchant_domain": "merchant.example",
+  "operation": "payment",
+  "tool_id": "example.pay_invoice",
+  "call_id": "test-call-0001",
+  "session_binding": "test-session-do-not-use-live",
+  "request_nonce": "JODaoPtibV_aEX41OP57_g",
+  "parameters": {
+    "recipient": {
+      "scheme": "example-provider-token",
+      "identifier": "TEST-PAYEE-0001"
+    },
+    "amount_minor": "25000",
+    "currency": "USD",
+    "invoice_id": "TEST-INVOICE-0001"
+  }
+}

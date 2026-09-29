@@ -1,0 +1,7 @@
+{
+  "evaluation_time": 1790596800,
+  "notice": "SYNTHETIC TEST DATA. Predictable public signing keys. No real merchant checks or payment.",
+  "audience": "https://gateway.example/merchant-gate",
+  "source_checks": "simulated; not independent business or bank verification",
+  "trace_reference": "fragment only, not a complete TRACE record"
+}

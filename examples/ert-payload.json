@@ -1,0 +1,30 @@
+{
+  "iss": "verifier.example",
+  "sub": "merchant.example",
+  "aud": "https://gateway.example/merchant-gate",
+  "iat": 1790596800,
+  "exp": 1790596920,
+  "jti": "7e2baf639f304547b090f0d3a7f9c269",
+  "mia_profile": "https://registeredbrands.ai/profiles/mia-runtime/v1",
+  "nonce": "JODaoPtibV_aEX41OP57_g",
+  "mia_verified": true,
+  "mia_subject": "merchant.example",
+  "mia_issued_at": "2026-09-28T00:00:00Z",
+  "mia_issuer_domain": "issuer.example",
+  "mia_digest": "sha256:b51d101cebc2b2145eff1d269b2b9cd3991461bf07d09f8047886b79f53c22fa",
+  "criteria_id": "https://buyer.example/policies/merchant-identity/1",
+  "criteria_digest": "sha256:710fec489e0a193adcd4b4df2dc1c1e75344dc86bf526c5f89e93ad468b94a55",
+  "request_digest": "sha256:6d18a1d1529cd9a8e6ed74ff9073d422cd7ce8bee48198586ebcfcbe4b09a3df",
+  "checks": {
+    "assertion_signature": "pass",
+    "merchant_domain": "pass",
+    "merchant_authorization": "pass",
+    "issuer_trust": "pass",
+    "identity_evidence": "pass",
+    "revocation": "pass",
+    "payment_recipient_binding": "pass"
+  },
+  "result": "pass",
+  "reason_codes": [],
+  "evidence_checked_at": 1790596790
+}

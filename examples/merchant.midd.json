@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "type": "MerchantIdentityDelegation",
+  "subject": "merchant.example",
+  "authorizedIssuer": "issuer.example",
+  "issuedAt": "2026-09-28T00:00:00Z",
+  "expiresAt": "2026-12-27T00:00:00Z",
+  "proof": {
+    "type": "MerchantIdentityProof-v1",
+    "alg": "Ed25519",
+    "created": "2026-09-28T00:00:00Z",
+    "verificationMethod": "https://merchant.example/.well-known/jwks.json#fixture-merchant-1",
+    "proofValue": "HWDXtM85e8oPijyjbQkLHZJlBXsoqRxTiBgJktpbWr9vIP7TfWXM5YVRZNb2EBvVGSR3xLXbZqwf07sq-wFmBQ"
+  }
+}

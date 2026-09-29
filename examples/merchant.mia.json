@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "subject": "merchant.example",
+  "legalName": "Example Merchant LLC — TEST FIXTURE",
+  "entityType": "llc",
+  "jurisdiction": "US",
+  "issuedAt": "2026-09-28T00:00:00Z",
+  "expiresAt": "2026-12-27T00:00:00Z",
+  "issuer": {
+    "name": "Example Issuer — TEST FIXTURE",
+    "domain": "issuer.example",
+    "keyDirectory": "https://issuer.example/.well-known/jwks.json"
+  },
+  "registrationId": "TEST-REGISTRATION-0001",
+  "evidenceUris": [
+    "https://registry.example/test-record/0001"
+  ],
+  "revocationUri": "https://issuer.example/status/test-0001",
+  "proof": {
+    "type": "MerchantIdentityProof-v1",
+    "alg": "Ed25519",
+    "created": "2026-09-28T00:00:00Z",
+    "verificationMethod": "https://issuer.example/.well-known/jwks.json#fixture-issuer-1",
+    "proofValue": "vMJBjDCNiZWlHjarqnCL4g9AV_-4rLx_TcmYuTCjhiRSqZO2Ba5B7fXGWimqPgkNnWoEkqmln0OWoAiljBfZAA"
+  }
+}

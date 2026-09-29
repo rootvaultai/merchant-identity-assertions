@@ -1,0 +1,7 @@
+{
+  "rel": "condition-appraisal",
+  "id": "urn:uuid:80957119-0fd9-4b88-8a7d-d4a3425fc482",
+  "resolver": "https://verifier.example/appraisals",
+  "retention": "P90D",
+  "digest": "sha256:c867d5d7ce91ca979651f1426bfbdd688d7a8210b212b71f929cd6c2846befc0"
+}

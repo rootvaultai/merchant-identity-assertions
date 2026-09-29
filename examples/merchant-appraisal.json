@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "type": "MerchantVerificationAppraisal-v1",
+  "id": "urn:uuid:80957119-0fd9-4b88-8a7d-d4a3425fc482",
+  "condition": {
+    "id": "https://buyer.example/policies/merchant-identity/1",
+    "digest": "sha256:710fec489e0a193adcd4b4df2dc1c1e75344dc86bf526c5f89e93ad468b94a55"
+  },
+  "subject": {
+    "id": "https://merchant.example/.well-known/merchant-identity.json",
+    "digest": "sha256:b51d101cebc2b2145eff1d269b2b9cd3991461bf07d09f8047886b79f53c22fa"
+  },
+  "issuer": "verifier.example",
+  "issuer_key_id": "fixture-verifier-1",
+  "signature_algorithm": "Ed25519",
+  "issued_at": 1790596800,
+  "outcome_vocabulary": "https://registeredbrands.ai/profiles/mia-runtime/v1#outcomes",
+  "outcome": "pass",
+  "checks": {
+    "assertion_signature": "pass",
+    "merchant_domain": "pass",
+    "merchant_authorization": "pass",
+    "issuer_trust": "pass",
+    "identity_evidence": "pass",
+    "revocation": "pass",
+    "payment_recipient_binding": "pass"
+  },
+  "request_digest": "sha256:6d18a1d1529cd9a8e6ed74ff9073d422cd7ce8bee48198586ebcfcbe4b09a3df",
+  "ert_digest": "sha256:51c67d7577d39b3c5cc6b5b500edde0872e89e3921cb9dd4c5c9948337f422f9",
+  "signature": "F3wu17Pmd0i6_GCczsXzdyZtPIWzND2mZQc-mVOQ1feDVgLBUd3rsCvI3YrmVvXYh_baIdAB8Lgj281Dw_0NDg"
+}
