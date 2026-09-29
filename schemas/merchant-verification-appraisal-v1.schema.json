@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://registeredbrands.ai/schemas/merchant-verification-appraisal-v1.schema.json",
+  "title": "merchant-verification-appraisal-v1",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "type": {
+      "const": "MerchantVerificationAppraisal-v1"
+    },
+    "id": {
+      "type": "string",
+      "format": "uri"
+    },
+    "condition": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uri"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "id",
+        "digest"
+      ],
+      "additionalProperties": false
+    },
+    "subject": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uri"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        }
+      },
+      "required": [
+        "id",
+        "digest"
+      ],
+      "additionalProperties": false
+    },
+    "issuer": {
+      "type": "string",
+      "minLength": 1
+    },
+    "issuer_key_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "signature_algorithm": {
+      "const": "Ed25519"
+    },
+    "issued_at": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "outcome_vocabulary": {
+      "const": "https://registeredbrands.ai/profiles/mia-runtime/v1#outcomes"
+    },
+    "outcome": {
+      "enum": [
+        "pass",
+        "fail",
+        "indeterminate"
+      ]
+    },
+    "checks": {
+      "type": "object",
+      "properties": {
+        "assertion_signature": {
+          "enum": [
+            "pass",
+            "fail",
+            "indeterminate",
+            "not_checked"
+          ]
+        },
+        "merchant_domain": {
+          "enum": [
+            "pass",
+            "fail",
+            "indeterminate",
+            "not_checked"
+          ]
+        },
+        "merchant_authorization": {
+          "enum": [
+            "pass",
+            "fail",
+            "indeterminate",
+            "not_checked"
+          ]
+        },
+        "issuer_trust": {
+          "enum": [
+            "pass",
+            "fail",
+            "indeterminate",
+            "not_checked"
+          ]
+        },
+        "identity_evidence": {
+          "enum": [
+            "pass",
+            "fail",
+            "indeterminate",
+            "not_checked"
+          ]
+        },
+        "revocation": {
+          "enum": [
+            "pass",
+            "fail",
+            "indeterminate",
+            "not_checked"
+          ]
+        },
+        "payment_recipient_binding": {
+          "enum": [
+            "pass",
+            "fail",
+            "indeterminate",
+            "not_checked"
+          ]
+        }
+      },
+      "required": [
+        "assertion_signature",
+        "merchant_domain",
+        "merchant_authorization",
+        "issuer_trust",
+        "identity_evidence",
+        "revocation",
+        "payment_recipient_binding"
+      ],
+      "additionalProperties": false
+    },
+    "request_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ert_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "signature": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{86}$"
+    }
+  },
+  "required": [
+    "version",
+    "type",
+    "id",
+    "condition",
+    "subject",
+    "issuer",
+    "issuer_key_id",
+    "signature_algorithm",
+    "issued_at",
+    "outcome_vocabulary",
+    "outcome",
+    "checks",
+    "request_digest",
+    "ert_digest",
+    "signature"
+  ],
+  "additionalProperties": false
+}

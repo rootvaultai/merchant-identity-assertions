@@ -1,0 +1,248 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://registeredbrands.ai/schemas/ert-rt1-payload.schema.json",
+  "title": "ert-rt1-payload",
+  "type": "object",
+  "properties": {
+    "iss": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$"
+    },
+    "sub": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$"
+    },
+    "aud": {
+      "type": "string",
+      "minLength": 1
+    },
+    "iat": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "exp": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "jti": {
+      "type": "string",
+      "minLength": 22
+    },
+    "mia_profile": {
+      "const": "https://registeredbrands.ai/profiles/mia-runtime/v1"
+    },
+    "nonce": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{22,}$"
+    },
+    "mia_verified": {
+      "type": "boolean"
+    },
+    "mia_digest": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "criteria_id": {
+      "type": "string",
+      "format": "uri"
+    },
+    "criteria_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "request_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "checks": {
+      "type": "object",
+      "properties": {
+        "assertion_signature": {
+          "enum": [
+            "pass",
+            "fail",
+            "indeterminate",
+            "not_checked"
+          ]
+        },
+        "merchant_domain": {
+          "enum": [
+            "pass",
+            "fail",
+            "indeterminate",
+            "not_checked"
+          ]
+        },
+        "merchant_authorization": {
+          "enum": [
+            "pass",
+            "fail",
+            "indeterminate",
+            "not_checked"
+          ]
+        },
+        "issuer_trust": {
+          "enum": [
+            "pass",
+            "fail",
+            "indeterminate",
+            "not_checked"
+          ]
+        },
+        "identity_evidence": {
+          "enum": [
+            "pass",
+            "fail",
+            "indeterminate",
+            "not_checked"
+          ]
+        },
+        "revocation": {
+          "enum": [
+            "pass",
+            "fail",
+            "indeterminate",
+            "not_checked"
+          ]
+        },
+        "payment_recipient_binding": {
+          "enum": [
+            "pass",
+            "fail",
+            "indeterminate",
+            "not_checked"
+          ]
+        }
+      },
+      "required": [
+        "assertion_signature",
+        "merchant_domain",
+        "merchant_authorization",
+        "issuer_trust",
+        "identity_evidence",
+        "revocation",
+        "payment_recipient_binding"
+      ],
+      "additionalProperties": false
+    },
+    "result": {
+      "enum": [
+        "pass",
+        "fail",
+        "indeterminate"
+      ]
+    },
+    "reason_codes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "evidence_checked_at": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "mia_subject": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$"
+    },
+    "mia_issued_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "mia_issuer_domain": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$"
+    }
+  },
+  "required": [
+    "iss",
+    "sub",
+    "aud",
+    "iat",
+    "exp",
+    "jti",
+    "mia_profile",
+    "nonce",
+    "mia_verified",
+    "mia_digest",
+    "criteria_id",
+    "criteria_digest",
+    "request_digest",
+    "checks",
+    "result",
+    "reason_codes",
+    "evidence_checked_at"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "mia_verified": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "mia_subject",
+          "mia_issued_at",
+          "mia_issuer_domain"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "pass"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "mia_verified": {
+            "const": true
+          },
+          "mia_digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "evidence_checked_at": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        }
+      }
+    }
+  ]
+}

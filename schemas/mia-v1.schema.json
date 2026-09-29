@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://registeredbrands.ai/schemas/mia-v1.schema.json",
+  "title": "mia-v1",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "subject": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 253,
+      "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$"
+    },
+    "legalName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "entityType": {
+      "enum": [
+        "corporation",
+        "llc",
+        "partnership",
+        "sole_proprietor",
+        "cooperative",
+        "nonprofit",
+        "government",
+        "other"
+      ]
+    },
+    "jurisdiction": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}$"
+    },
+    "issuedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "expiresAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "issuer": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "domain": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 253,
+          "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$"
+        },
+        "keyDirectory": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://[^?#]+$"
+        }
+      },
+      "required": [
+        "name",
+        "domain",
+        "keyDirectory"
+      ],
+      "additionalProperties": false
+    },
+    "proof": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "MerchantIdentityProof-v1"
+        },
+        "alg": {
+          "const": "Ed25519"
+        },
+        "created": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "verificationMethod": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://[^?#]+#[A-Za-z0-9_-]+$"
+        },
+        "proofValue": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{86}$"
+        }
+      },
+      "required": [
+        "type",
+        "alg",
+        "created",
+        "verificationMethod",
+        "proofValue"
+      ],
+      "additionalProperties": false
+    },
+    "registrationId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidenceUris": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri",
+        "pattern": "^https://"
+      }
+    },
+    "revocationUri": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://"
+    },
+    "extensions": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "version",
+    "subject",
+    "legalName",
+    "entityType",
+    "jurisdiction",
+    "issuedAt",
+    "expiresAt",
+    "issuer",
+    "proof"
+  ],
+  "additionalProperties": true
+}
